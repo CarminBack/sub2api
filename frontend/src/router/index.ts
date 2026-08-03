@@ -461,6 +461,19 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/users/managed',
+    name: 'AdminManagedUsers',
+    component: () => import('@/views/admin/UsersView.vue'),
+    props: { restricted: true },
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'User Management',
+      titleKey: 'admin.users.title',
+      descriptionKey: 'admin.users.description'
+    }
+  },
+  {
     path: '/admin/groups',
     name: 'AdminGroups',
     component: () => import('@/views/admin/GroupsView.vue'),
@@ -634,6 +647,19 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/usage/managed',
+    name: 'AdminManagedUsage',
+    component: () => import('@/views/admin/UsageView.vue'),
+    props: { restricted: true },
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Usage Records',
+      titleKey: 'admin.usage.title',
+      descriptionKey: 'admin.usage.description'
+    }
+  },
+  {
     path: '/admin/affiliates',
     redirect: '/admin/affiliates/invites'
   },
@@ -696,6 +722,19 @@ const routes: RouteRecordRaw[] = [
       requiresAuth: true,
       requiresAdmin: true,
       title: 'Order Management',
+      titleKey: 'nav.orderManagement',
+      requiresPayment: true
+    }
+  },
+  {
+    path: '/admin/orders/records',
+    name: 'AdminRechargeRecords',
+    component: () => import('@/views/admin/orders/AdminOrdersView.vue'),
+    props: { readonly: true },
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Recharge Records',
       titleKey: 'nav.orderManagement',
       requiresPayment: true
     }
@@ -892,9 +931,14 @@ router.beforeEach(async (to, _from, next) => {
     requiresAdmin &&
     authStore.isAdmin &&
     !authStore.isPrimaryAdmin &&
-    to.path !== '/admin/users/create'
+    !new Set([
+      '/admin/users/create',
+      '/admin/users/managed',
+      '/admin/orders/records',
+      '/admin/usage/managed'
+    ]).has(to.path)
   ) {
-    next('/admin/users/create')
+    next('/admin/users/managed')
     return
   }
 

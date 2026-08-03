@@ -23,7 +23,7 @@
             </div>
 
             <!-- Role Filter (visible when enabled) -->
-            <div v-if="visibleFilters.has('role')" class="w-full sm:w-32">
+            <div v-if="!props.restricted && visibleFilters.has('role')" class="w-full sm:w-32">
               <Select
                 v-model="filters.role"
                 :options="[
@@ -49,7 +49,7 @@
             </div>
 
             <!-- Group Filter (visible when enabled) -->
-            <div v-if="visibleFilters.has('group')" class="w-full sm:w-44">
+            <div v-if="!props.restricted && visibleFilters.has('group')" class="w-full sm:w-44">
               <Select
                 v-model="filters.group"
                 :options="groupFilterOptions"
@@ -62,7 +62,7 @@
             </div>
 
             <!-- API Key Group Filter (visible when enabled) -->
-            <div v-if="visibleFilters.has('apiKeyGroup')" class="w-full sm:w-44">
+            <div v-if="!props.restricted && visibleFilters.has('apiKeyGroup')" class="w-full sm:w-44">
               <Select
                 v-model="filters.apiKeyGroup"
                 :options="apiKeyGroupFilterOptions"
@@ -233,6 +233,7 @@
               </div>
               <!-- Attributes Config Button -->
               <button
+                v-if="!props.restricted"
                 @click="showAttributesModal = true"
                 class="btn btn-secondary px-2 md:px-3"
                 :title="t('admin.users.attributes.configButton')"
@@ -243,7 +244,7 @@
             </div>
 
             <button
-              v-if="selectedCount > 0"
+              v-if="!props.restricted && selectedCount > 0"
               class="btn btn-secondary flex-1 md:flex-initial"
               data-test="bulk-edit-limits"
               @click="showBulkEditModal = true"
@@ -268,7 +269,7 @@
           :data="sortedUsers"
           :loading="loading"
           row-key="id"
-          selectable
+          :selectable="!props.restricted"
           :selected-keys="selectedIds"
           :selection-label="getUserSelectionLabel"
           :actions-count="7"
@@ -683,6 +684,7 @@
 
               <!-- Allowed Groups -->
               <button
+                v-if="!props.restricted"
                 @click="handleAllowedGroups(user); closeActionMenu()"
                 class="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
               >
@@ -714,6 +716,7 @@
 
               <!-- Platform Quotas -->
               <button
+                v-if="!props.restricted"
                 @click="handlePlatformQuota(user); closeActionMenu()"
                 class="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
               >
@@ -748,26 +751,28 @@
     </Teleport>
 
     <ConfirmDialog :show="showDeleteDialog" :title="t('admin.users.deleteUser')" :message="t('admin.users.deleteConfirm', { email: deletingUser?.email })" :danger="true" @confirm="confirmDelete" @cancel="showDeleteDialog = false" />
-    <UserCreateModal :show="showCreateModal" @close="showCreateModal = false" @success="loadUsers" />
-    <UserEditModal :show="showEditModal" :user="editingUser" @close="closeEditModal" @success="loadUsers" />
+    <UserCreateModal :show="showCreateModal" :regular-only="props.restricted" @close="showCreateModal = false" @success="loadUsers" />
+    <UserEditModal :show="showEditModal" :user="editingUser" :regular-only="props.restricted" @close="closeEditModal" @success="loadUsers" />
     <BulkEditUserModal
+      v-if="!props.restricted"
       :show="showBulkEditModal"
       :selected-ids="selectedIds"
       @close="showBulkEditModal = false"
       @success="handleBulkLimitsSuccess"
     />
     <UserPlatformQuotaModal
+      v-if="!props.restricted"
       :show="showPlatformQuotaModal"
       :user="platformQuotaUser"
       @close="closePlatformQuotaModal"
       @success="loadUsers"
     />
     <UserApiKeysModal :show="showApiKeysModal" :user="viewingUser" @close="closeApiKeysModal" />
-    <UserAllowedGroupsModal :show="showAllowedGroupsModal" :user="allowedGroupsUser" @close="closeAllowedGroupsModal" @success="loadUsers" />
+    <UserAllowedGroupsModal v-if="!props.restricted" :show="showAllowedGroupsModal" :user="allowedGroupsUser" @close="closeAllowedGroupsModal" @success="loadUsers" />
     <UserBalanceModal :show="showBalanceModal" :user="balanceUser" :operation="balanceOperation" @close="closeBalanceModal" @success="loadUsers" />
     <UserBalanceHistoryModal :show="showBalanceHistoryModal" :user="balanceHistoryUser" @close="closeBalanceHistoryModal" @deposit="handleDepositFromHistory" @withdraw="handleWithdrawFromHistory" />
-    <GroupReplaceModal :show="showGroupReplaceModal" :user="groupReplaceUser" :old-group="groupReplaceOldGroup" :all-groups="allGroups" @close="closeGroupReplaceModal" @success="loadUsers" />
-    <UserAttributesConfigModal :show="showAttributesModal" @close="handleAttributesModalClose" />
+    <GroupReplaceModal v-if="!props.restricted" :show="showGroupReplaceModal" :user="groupReplaceUser" :old-group="groupReplaceOldGroup" :all-groups="allGroups" @close="closeGroupReplaceModal" @success="loadUsers" />
+    <UserAttributesConfigModal v-if="!props.restricted" :show="showAttributesModal" @close="handleAttributesModalClose" />
   </AppLayout>
 </template>
 
@@ -781,6 +786,9 @@ import { formatDateTime } from '@/utils/format'
 import Icon from '@/components/icons/Icon.vue'
 
 const { t } = useI18n()
+const props = withDefaults(defineProps<{ restricted?: boolean }>(), {
+  restricted: false,
+})
 import { adminAPI } from '@/api/admin'
 import type { AdminUser, AdminGroup, UserAttributeDefinition } from '@/types'
 import type { BatchUserUsageStats } from '@/api/admin/dashboard'
@@ -860,8 +868,9 @@ const getAttributeValue = (userId: number, attrId: number): string => {
 }
 
 // All possible columns (for column settings)
-const allColumns = computed<Column[]>(() => [
-  { key: 'email', label: t('admin.users.columns.user'), sortable: true },
+const allColumns = computed<Column[]>(() => {
+  const columns: Column[] = [
+    { key: 'email', label: t('admin.users.columns.user'), sortable: true },
   { key: 'id', label: t('admin.users.columns.id'), sortable: true },
   { key: 'username', label: t('admin.users.columns.username'), sortable: true },
   { key: 'notes', label: t('admin.users.columns.notes'), sortable: false },
@@ -882,8 +891,15 @@ const allColumns = computed<Column[]>(() => [
   { key: 'last_active_at', label: t('admin.users.columns.lastActive'), sortable: true },
   { key: 'last_used_at', label: t('admin.users.columns.lastUsed'), sortable: true },
   { key: 'created_at', label: t('admin.users.columns.created'), sortable: true },
-  { key: 'actions', label: t('admin.users.columns.actions'), sortable: false }
-])
+    { key: 'actions', label: t('admin.users.columns.actions'), sortable: false }
+  ]
+  if (!props.restricted) return columns
+  const hiddenForRestricted = new Set([
+    'role', 'groups', 'subscriptions', 'balance_platform_quota',
+    'usage', 'usage_anthropic', 'usage_openai', 'usage_gemini', 'usage_antigravity'
+  ])
+  return columns.filter((column) => !hiddenForRestricted.has(column.key) && !column.key.startsWith('attr_'))
+})
 
 // Columns that can be toggled (exclude email and actions which are always visible)
 const toggleableColumns = computed(() =>
@@ -1004,7 +1020,7 @@ const USAGE_COLUMN_PLATFORMS: Record<string, string | null> = {
 }
 const PLATFORM_USAGE_COLUMNS = USAGE_COLUMN_KEYS.filter((k) => k !== 'usage')
 const hasVisibleUsageColumn = computed(
-  () => !hiddenColumns.has('usage') || PLATFORM_USAGE_COLUMNS.some((k) => !hiddenColumns.has(k))
+  () => !props.restricted && (!hiddenColumns.has('usage') || PLATFORM_USAGE_COLUMNS.some((k) => !hiddenColumns.has(k)))
 )
 const hasVisibleGroupsColumn = computed(() => !hiddenColumns.has('groups'))
 const hasVisiblePlatformQuotaColumn = computed(() => !hiddenColumns.has('balance_platform_quota'))
@@ -1136,12 +1152,15 @@ const filterableAttributes = computed(() =>
 )
 
 // Built-in filter definitions
-const builtInFilters = computed(() => [
-  { key: 'role', name: t('admin.users.columns.role'), type: 'select' as const },
-  { key: 'status', name: t('admin.users.columns.status'), type: 'select' as const },
-  { key: 'group', name: t('admin.users.authorizedGroupFilter'), type: 'select' as const },
-  { key: 'apiKeyGroup', name: t('admin.users.apiKeyGroupFilter'), type: 'select' as const }
-])
+const builtInFilters = computed(() => {
+  const items = [
+    { key: 'role', name: t('admin.users.columns.role'), type: 'select' as const },
+    { key: 'status', name: t('admin.users.columns.status'), type: 'select' as const },
+    { key: 'group', name: t('admin.users.authorizedGroupFilter'), type: 'select' as const },
+    { key: 'apiKeyGroup', name: t('admin.users.apiKeyGroupFilter'), type: 'select' as const }
+  ]
+  return props.restricted ? items.filter((item) => item.key === 'status') : items
+})
 
 // Load saved filters from localStorage
 const loadSavedFilters = () => {
@@ -1163,6 +1182,18 @@ const loadSavedFilters = () => {
       if (parsed.attributes) {
         Object.assign(activeAttributeFilters, parsed.attributes)
       }
+    }
+    if (props.restricted) {
+      filters.role = 'user'
+      filters.group = ''
+      filters.apiKeyGroup = null
+      visibleFilters.delete('role')
+      visibleFilters.delete('group')
+      visibleFilters.delete('apiKeyGroup')
+      for (const key of [...visibleFilters]) {
+        if (key.startsWith('attr_')) visibleFilters.delete(key)
+      }
+      for (const key of Object.keys(activeAttributeFilters)) delete activeAttributeFilters[Number(key)]
     }
   } catch (e) {
     console.error('Failed to load saved filters:', e)
@@ -1383,7 +1414,7 @@ const loadUsersSecondaryData = async (
     )
   }
 
-  if (hasVisiblePlatformQuotaColumn.value) {
+  if (!props.restricted && hasVisiblePlatformQuotaColumn.value) {
     tasks.push(
       (async () => {
         try {
@@ -1578,14 +1609,14 @@ const loadUsers = async () => {
       pagination.page,
       pagination.page_size,
       {
-        role: filters.role as any,
+        role: (props.restricted ? 'user' : filters.role) as any,
         status: filters.status as any,
         search: searchQuery.value || undefined,
-        group_name: filters.group || undefined,
-        api_key_group_id: filters.apiKeyGroup ?? undefined,
-        attributes: Object.keys(attrFilters).length > 0 ? attrFilters : undefined,
+        group_name: props.restricted ? undefined : filters.group || undefined,
+        api_key_group_id: props.restricted ? undefined : filters.apiKeyGroup ?? undefined,
+        attributes: !props.restricted && Object.keys(attrFilters).length > 0 ? attrFilters : undefined,
         // 始终请求 subscriptions：列隐藏时仍需用于 UserPlatformQuotaModal 的 active-subscription 警示 banner
-        include_subscriptions: true,
+        include_subscriptions: !props.restricted,
         sort_by: sortState.sort_by,
         sort_order: sortState.sort_order
       },
@@ -1832,14 +1863,14 @@ const handleScroll = () => {
 }
 
 onMounted(async () => {
-  await loadAttributeDefinitions()
+  if (!props.restricted) await loadAttributeDefinitions()
   loadSavedFilters()
   loadSavedColumns()
   loadUsers()
-  if (hasVisibleGroupsColumn.value || visibleFilters.has('group')) {
+  if (!props.restricted && (hasVisibleGroupsColumn.value || visibleFilters.has('group'))) {
     loadAllGroups()
   }
-  if (visibleFilters.has('apiKeyGroup')) {
+  if (!props.restricted && visibleFilters.has('apiKeyGroup')) {
     loadAllGroupsForApiKeyFilter()
   }
   document.addEventListener('click', handleClickOutside)

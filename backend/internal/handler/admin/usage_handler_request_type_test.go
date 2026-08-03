@@ -8,6 +8,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
+	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -18,9 +19,13 @@ type adminUsageRepoCapture struct {
 	listParams   pagination.PaginationParams
 	listFilters  usagestats.UsageLogFilters
 	statsFilters usagestats.UsageLogFilters
+	listCalls    int
+	statsCalls   int
+	statsResult  *usagestats.UsageStats
 }
 
 func (s *adminUsageRepoCapture) ListWithFilters(ctx context.Context, params pagination.PaginationParams, filters usagestats.UsageLogFilters) ([]service.UsageLog, *pagination.PaginationResult, error) {
+	s.listCalls++
 	s.listParams = params
 	s.listFilters = filters
 	return []service.UsageLog{}, &pagination.PaginationResult{
@@ -32,7 +37,11 @@ func (s *adminUsageRepoCapture) ListWithFilters(ctx context.Context, params pagi
 }
 
 func (s *adminUsageRepoCapture) GetStatsWithFilters(ctx context.Context, filters usagestats.UsageLogFilters) (*usagestats.UsageStats, error) {
+	s.statsCalls++
 	s.statsFilters = filters
+	if s.statsResult != nil {
+		return s.statsResult, nil
+	}
 	return &usagestats.UsageStats{}, nil
 }
 
@@ -44,6 +53,77 @@ func newAdminUsageRequestTypeTestRouter(repo *adminUsageRepoCapture) *gin.Engine
 	router.GET("/admin/usage", handler.List)
 	router.GET("/admin/usage/stats", handler.Stats)
 	return router
+}
+
+func newRestrictedAdminUsageTestRouter(repo *adminUsageRepoCapture, adminSvc service.AdminService) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	usageSvc := service.NewUsageService(repo, nil, nil, nil)
+	handler := NewUsageHandler(usageSvc, nil, adminSvc, nil)
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 3})
+		c.Next()
+	})
+	router.GET("/admin/usage", handler.List)
+	router.GET("/admin/usage/stats", handler.Stats)
+	return router
+}
+
+func TestRestrictedAdminUsageForcesRegularUserScope(t *testing.T) {
+	repo := &adminUsageRepoCapture{}
+	router := newRestrictedAdminUsageTestRouter(repo, newStubAdminService())
+
+	for _, path := range []string{"/admin/usage", "/admin/usage/stats"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code)
+	}
+
+	require.Equal(t, service.RoleUser, repo.listFilters.UserRole)
+	require.Equal(t, service.RoleUser, repo.statsFilters.UserRole)
+}
+
+func TestRestrictedAdminUsageRejectsPlatformFilters(t *testing.T) {
+	tests := []string{
+		"/admin/usage?account_id=1",
+		"/admin/usage?group_id=1",
+		"/admin/usage/stats?account_id=1",
+		"/admin/usage/stats?group_id=1",
+	}
+	for _, path := range tests {
+		t.Run(path, func(t *testing.T) {
+			repo := &adminUsageRepoCapture{}
+			router := newRestrictedAdminUsageTestRouter(repo, newStubAdminService())
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			require.Equal(t, http.StatusForbidden, rec.Code)
+			require.Zero(t, repo.listCalls+repo.statsCalls)
+		})
+	}
+}
+
+func TestRestrictedAdminUsageRequiresUserForAPIKeyFilter(t *testing.T) {
+	repo := &adminUsageRepoCapture{}
+	router := newRestrictedAdminUsageTestRouter(repo, newStubAdminService())
+	req := httptest.NewRequest(http.MethodGet, "/admin/usage?api_key_id=10", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Zero(t, repo.listCalls)
+}
+
+func TestRestrictedAdminUsageRejectsAdminUserFilter(t *testing.T) {
+	repo := &adminUsageRepoCapture{}
+	adminSvc := newStubAdminService()
+	adminSvc.users = append(adminSvc.users, service.User{ID: 2, Email: "admin@example.com", Role: service.RoleAdmin})
+	router := newRestrictedAdminUsageTestRouter(repo, adminSvc)
+	req := httptest.NewRequest(http.MethodGet, "/admin/usage?user_id=2", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.Zero(t, repo.listCalls)
 }
 
 func TestAdminUsageListRequestTypePriority(t *testing.T) {

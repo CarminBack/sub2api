@@ -26,20 +26,18 @@ func RegisterAdminRoutes(
 	// 审计中间件挂在认证之后：所有管理面变更类操作 + 敏感读取入审计日志
 	admin.Use(gin.HandlerFunc(auditLog))
 
-	// 所有管理员都可完成合规确认；受限管理员确认后只能创建普通用户。
+	// 所有管理员都可完成合规确认。
 	registerAdminComplianceRoutes(admin, h)
-	admin.POST("/users/regular", middleware.AdminComplianceGuard(settingService), h.Admin.User.CreateRegular)
+	admin.Use(middleware.AdminComplianceGuard(settingService))
+
+	// 下游管理员可运营普通用户，并只读查看充值与消费数据。
+	registerDashboardRoutes(admin, h)
+	registerUserManagementRoutes(admin, h)
+	registerUsageRoutes(admin, h)
 
 	// 初始安装管理员是唯一拥有完整管理面的主账号。
 	admin.Use(middleware.PrimaryAdminOnly())
-	admin.Use(middleware.AdminComplianceGuard(settingService))
 	{
-		// 仪表盘
-		registerDashboardRoutes(admin, h)
-
-		// 用户管理
-		registerUserManagementRoutes(admin, h)
-
 		// 分组管理
 		registerGroupRoutes(admin, h)
 
@@ -87,9 +85,6 @@ func RegisterAdminRoutes(
 
 		// 订阅管理
 		registerSubscriptionRoutes(admin, h)
-
-		// 使用记录管理
-		registerUsageRoutes(admin, h)
 
 		// 用户属性管理
 		registerUserAttributeRoutes(admin, h)
@@ -274,46 +269,49 @@ func registerOpsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 func registerDashboardRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	dashboard := admin.Group("/dashboard")
 	{
-		dashboard.GET("/snapshot-v2", h.Admin.Dashboard.GetSnapshotV2)
-		dashboard.GET("/stats", h.Admin.Dashboard.GetStats)
-		dashboard.GET("/realtime", h.Admin.Dashboard.GetRealtimeMetrics)
-		dashboard.GET("/trend", h.Admin.Dashboard.GetUsageTrend)
-		dashboard.GET("/models", h.Admin.Dashboard.GetModelStats)
-		dashboard.GET("/groups", h.Admin.Dashboard.GetGroupStats)
-		dashboard.GET("/api-keys-trend", h.Admin.Dashboard.GetAPIKeyUsageTrend)
-		dashboard.GET("/users-trend", h.Admin.Dashboard.GetUserUsageTrend)
-		dashboard.GET("/users-ranking", h.Admin.Dashboard.GetUserSpendingRanking)
-		dashboard.POST("/users-usage", h.Admin.Dashboard.GetBatchUsersUsage)
-		dashboard.POST("/api-keys-usage", h.Admin.Dashboard.GetBatchAPIKeysUsage)
-		dashboard.GET("/user-breakdown", h.Admin.Dashboard.GetUserBreakdown)
-		dashboard.POST("/aggregation/backfill", h.Admin.Dashboard.BackfillAggregation)
+		primaryOnly := middleware.PrimaryAdminOnly()
+		dashboard.GET("/snapshot-v2", primaryOnly, h.Admin.Dashboard.GetSnapshotV2)
+		dashboard.GET("/stats", primaryOnly, h.Admin.Dashboard.GetStats)
+		dashboard.GET("/realtime", primaryOnly, h.Admin.Dashboard.GetRealtimeMetrics)
+		dashboard.GET("/trend", primaryOnly, h.Admin.Dashboard.GetUsageTrend)
+		dashboard.GET("/models", primaryOnly, h.Admin.Dashboard.GetModelStats)
+		dashboard.GET("/groups", primaryOnly, h.Admin.Dashboard.GetGroupStats)
+		dashboard.GET("/api-keys-trend", primaryOnly, h.Admin.Dashboard.GetAPIKeyUsageTrend)
+		dashboard.GET("/users-trend", primaryOnly, h.Admin.Dashboard.GetUserUsageTrend)
+		dashboard.GET("/users-ranking", primaryOnly, h.Admin.Dashboard.GetUserSpendingRanking)
+		dashboard.POST("/users-usage", primaryOnly, h.Admin.Dashboard.GetBatchUsersUsage)
+		dashboard.POST("/api-keys-usage", primaryOnly, h.Admin.Dashboard.GetBatchAPIKeysUsage)
+		dashboard.GET("/user-breakdown", primaryOnly, h.Admin.Dashboard.GetUserBreakdown)
+		dashboard.POST("/aggregation/backfill", primaryOnly, h.Admin.Dashboard.BackfillAggregation)
 	}
 }
 
 func registerUserManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	users := admin.Group("/users")
 	{
+		primaryOnly := middleware.PrimaryAdminOnly()
 		users.GET("", h.Admin.User.List)
 		users.GET("/:id", h.Admin.User.GetByID)
-		users.POST("/:id/auth-identities", h.Admin.User.BindAuthIdentity)
+		users.POST("/:id/auth-identities", primaryOnly, h.Admin.User.BindAuthIdentity)
 		users.POST("", h.Admin.User.Create)
+		users.POST("/regular", h.Admin.User.CreateRegular)
 		users.PUT("/:id", h.Admin.User.Update)
 		users.DELETE("/:id", h.Admin.User.Delete)
 		users.POST("/:id/balance", h.Admin.User.UpdateBalance)
 		users.GET("/:id/api-keys", h.Admin.User.GetUserAPIKeys)
 		users.GET("/:id/usage", h.Admin.User.GetUserUsage)
 		users.GET("/:id/balance-history", h.Admin.User.GetBalanceHistory)
-		users.POST("/:id/replace-group", h.Admin.User.ReplaceGroup)
+		users.POST("/:id/replace-group", primaryOnly, h.Admin.User.ReplaceGroup)
 		users.GET("/:id/rpm-status", h.Admin.User.GetUserRPMStatus)
-		users.POST("/batch-concurrency", h.Admin.User.BatchUpdateConcurrency)
-		users.POST("/batch-limits", h.Admin.User.BatchUpdateLimits)
-		users.GET("/:id/platform-quotas", h.Admin.User.GetUserPlatformQuotas)
-		users.PUT("/:id/platform-quotas", h.Admin.User.UpdateUserPlatformQuotas)
-		users.POST("/:id/platform-quotas/reset", h.Admin.User.ResetUserPlatformQuotaWindow)
+		users.POST("/batch-concurrency", primaryOnly, h.Admin.User.BatchUpdateConcurrency)
+		users.POST("/batch-limits", primaryOnly, h.Admin.User.BatchUpdateLimits)
+		users.GET("/:id/platform-quotas", primaryOnly, h.Admin.User.GetUserPlatformQuotas)
+		users.PUT("/:id/platform-quotas", primaryOnly, h.Admin.User.UpdateUserPlatformQuotas)
+		users.POST("/:id/platform-quotas/reset", primaryOnly, h.Admin.User.ResetUserPlatformQuotaWindow)
 
 		// User attribute values
-		users.GET("/:id/attributes", h.Admin.UserAttribute.GetUserAttributes)
-		users.PUT("/:id/attributes", h.Admin.UserAttribute.UpdateUserAttributes)
+		users.GET("/:id/attributes", primaryOnly, h.Admin.UserAttribute.GetUserAttributes)
+		users.PUT("/:id/attributes", primaryOnly, h.Admin.UserAttribute.UpdateUserAttributes)
 	}
 }
 
@@ -667,9 +665,10 @@ func registerUsageRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		usage.GET("/stats", h.Admin.Usage.Stats)
 		usage.GET("/search-users", h.Admin.Usage.SearchUsers)
 		usage.GET("/search-api-keys", h.Admin.Usage.SearchAPIKeys)
-		usage.GET("/cleanup-tasks", h.Admin.Usage.ListCleanupTasks)
-		usage.POST("/cleanup-tasks", h.Admin.Usage.CreateCleanupTask)
-		usage.POST("/cleanup-tasks/:id/cancel", h.Admin.Usage.CancelCleanupTask)
+		primaryOnly := middleware.PrimaryAdminOnly()
+		usage.GET("/cleanup-tasks", primaryOnly, h.Admin.Usage.ListCleanupTasks)
+		usage.POST("/cleanup-tasks", primaryOnly, h.Admin.Usage.CreateCleanupTask)
+		usage.POST("/cleanup-tasks/:id/cancel", primaryOnly, h.Admin.Usage.CancelCleanupTask)
 	}
 }
 

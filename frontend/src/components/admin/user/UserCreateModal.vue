@@ -25,7 +25,7 @@
         <label class="input-label">{{ t('admin.users.username') }}</label>
         <input v-model="form.username" type="text" class="input" :placeholder="t('admin.users.enterUsername')" />
       </div>
-      <div>
+      <div v-if="!props.regularOnly">
         <label class="input-label">{{ t('admin.users.form.roleLabel') }}</label>
         <select v-model="form.role" class="input">
           <option value="user">{{ t('admin.users.roles.user') }}</option>
@@ -66,7 +66,7 @@
   </BaseDialog>
 
   <!-- 创建管理员账号时后端要求 step-up 2FA，弹出 TOTP 验证后自动重试 -->
-  <TotpStepUpDialog :controller="stepUp" />
+  <TotpStepUpDialog v-if="!props.regularOnly" :controller="stepUp" />
 </template>
 
 <script setup lang="ts">
@@ -78,7 +78,9 @@ import Icon from '@/components/icons/Icon.vue'
 import { useStepUp, isStepUpBlocked, isStepUpCancelled, stepUpBlockReason } from '@/composables/useStepUp'
 import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
 
-const props = defineProps<{ show: boolean }>()
+const props = withDefaults(defineProps<{ show: boolean; regularOnly?: boolean }>(), {
+  regularOnly: false,
+})
 const emit = defineEmits(['close', 'success']); const { t } = useI18n()
 const appStore = useAppStore()
 
@@ -93,7 +95,10 @@ const submit = async () => {
   try {
     const { balance: rawBalance, ...rest } = { ...form }
     const balance = String(rawBalance).trim()
-    const payload: typeof rest & { balance?: number } = { ...rest }
+    const payload: typeof rest & { balance?: number } = {
+      ...rest,
+      role: props.regularOnly ? 'user' : rest.role,
+    }
     if (balance !== '') {
       payload.balance = Number(balance)
     }

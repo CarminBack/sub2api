@@ -112,6 +112,13 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestShouldUseFastUsageLogTotalRequiresUnscopedQuery(t *testing.T) {
+	require.True(t, shouldUseFastUsageLogTotal(usagestats.UsageLogFilters{}))
+	require.False(t, shouldUseFastUsageLogTotal(usagestats.UsageLogFilters{UserRole: service.RoleUser}))
+	require.False(t, shouldUseFastUsageLogTotal(usagestats.UsageLogFilters{UserID: 7}))
+	require.False(t, shouldUseFastUsageLogTotal(usagestats.UsageLogFilters{ExactTotal: true}))
+}
+
 func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 	db, mock := newSQLMock(t)
 	repo := &usageLogRepository{sql: db}

@@ -118,6 +118,36 @@ type BindUserAuthIdentityChannelRequest struct {
 	Metadata       map[string]any `json:"metadata"`
 }
 
+func (h *UserHandler) requireRegularUserForRestrictedAdmin(c *gin.Context, userID int64) bool {
+	if !middleware.IsRestrictedAdmin(c) {
+		return true
+	}
+
+	user, err := h.adminService.GetUser(c.Request.Context(), userID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return false
+	}
+	if user.Role != service.RoleUser {
+		response.Forbidden(c, "Restricted admins can only manage regular users")
+		return false
+	}
+	return true
+}
+
+func userDTOForAdminScope(c *gin.Context, user *service.User) *dto.AdminUser {
+	out := dto.UserFromServiceAdmin(user)
+	if out == nil || !middleware.IsRestrictedAdmin(c) {
+		return out
+	}
+
+	// Group assignments and subscriptions belong to the primary-admin control plane.
+	out.AllowedGroups = nil
+	out.Subscriptions = nil
+	out.GroupRates = nil
+	return out
+}
+
 // List handles listing all users with pagination
 // GET /api/v1/admin/users
 // Query params:
@@ -144,17 +174,27 @@ func (h *UserHandler) List(c *gin.Context) {
 		GroupName:  strings.TrimSpace(c.Query("group_name")),
 		Attributes: parseAttributeFilters(c),
 	}
-	if raw := strings.TrimSpace(c.Query("api_key_group_id")); raw != "" {
+	if middleware.IsRestrictedAdmin(c) {
+		filters.Role = service.RoleUser
+		filters.GroupName = ""
+		filters.Attributes = nil
+		includeSubscriptions := false
+		filters.IncludeSubscriptions = &includeSubscriptions
+	}
+	if !middleware.IsRestrictedAdmin(c) {
+		if raw, ok := c.GetQuery("include_subscriptions"); ok {
+			includeSubscriptions := parseBoolQueryWithDefault(raw, true)
+			filters.IncludeSubscriptions = &includeSubscriptions
+		}
+	}
+	if !middleware.IsRestrictedAdmin(c) {
+		raw := strings.TrimSpace(c.Query("api_key_group_id"))
 		if id, parseErr := strconv.ParseInt(raw, 10, 64); parseErr == nil && id > 0 {
 			filters.APIKeyGroupID = id
 		}
 	}
 	sortBy := c.DefaultQuery("sort_by", "created_at")
 	sortOrder := c.DefaultQuery("sort_order", "desc")
-	if raw, ok := c.GetQuery("include_subscriptions"); ok {
-		includeSubscriptions := parseBoolQueryWithDefault(raw, true)
-		filters.IncludeSubscriptions = &includeSubscriptions
-	}
 
 	users, total, err := h.adminService.ListUsers(c.Request.Context(), page, pageSize, filters, sortBy, sortOrder)
 	if err != nil {
@@ -179,7 +219,7 @@ func (h *UserHandler) List(c *gin.Context) {
 	out := make([]UserWithConcurrency, len(users))
 	for i := range users {
 		out[i] = UserWithConcurrency{
-			AdminUser: *dto.UserFromServiceAdmin(&users[i]),
+			AdminUser: *userDTOForAdminScope(c, &users[i]),
 		}
 		if info := loadInfo[users[i].ID]; info != nil {
 			out[i].CurrentConcurrency = info.CurrentConcurrency
@@ -231,8 +271,12 @@ func (h *UserHandler) GetByID(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	if middleware.IsRestrictedAdmin(c) && user.Role != service.RoleUser {
+		response.Forbidden(c, "Restricted admins can only view regular users")
+		return
+	}
 
-	response.Success(c, dto.UserFromServiceAdmin(user))
+	response.Success(c, userDTOForAdminScope(c, user))
 }
 
 // BindAuthIdentity manually binds a canonical auth identity to a user.
@@ -282,6 +326,13 @@ func (h *UserHandler) Create(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	if middleware.IsRestrictedAdmin(c) {
+		if req.Role == service.RoleAdmin || len(req.AllowedGroups) > 0 {
+			response.Forbidden(c, "Restricted admins cannot grant administrative or group privileges")
+			return
+		}
+		req.Role = service.RoleUser
+	}
 
 	// 创建管理员账号属权限敏感操作：需最近完成 step-up 2FA 验证。
 	if req.Role == service.RoleAdmin {
@@ -307,7 +358,7 @@ func (h *UserHandler) Create(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, dto.UserFromServiceAdmin(user))
+	response.Success(c, userDTOForAdminScope(c, user))
 }
 
 // CreateRegular creates an ordinary user with server defaults.
@@ -332,7 +383,7 @@ func (h *UserHandler) CreateRegular(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, dto.UserFromServiceAdmin(user))
+	response.Success(c, userDTOForAdminScope(c, user))
 }
 
 // Update handles updating a user
@@ -348,6 +399,16 @@ func (h *UserHandler) Update(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
+	}
+	if !h.requireRegularUserForRestrictedAdmin(c, userID) {
+		return
+	}
+	if middleware.IsRestrictedAdmin(c) {
+		if req.Role == service.RoleAdmin || req.AllowedGroups != nil || req.GroupRates != nil {
+			response.Forbidden(c, "Restricted admins cannot grant administrative or group privileges")
+			return
+		}
+		req.Role = service.RoleUser
 	}
 
 	// 防锁死保护：管理员不能把自己降级为普通用户(单管理员场景下会失去后台访问权)。
@@ -392,7 +453,7 @@ func (h *UserHandler) Update(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, dto.UserFromServiceAdmin(user))
+	response.Success(c, userDTOForAdminScope(c, user))
 }
 
 // Delete handles deleting a user
@@ -401,6 +462,9 @@ func (h *UserHandler) Delete(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+	if !h.requireRegularUserForRestrictedAdmin(c, userID) {
 		return
 	}
 
@@ -419,6 +483,9 @@ func (h *UserHandler) UpdateBalance(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+	if !h.requireRegularUserForRestrictedAdmin(c, userID) {
 		return
 	}
 
@@ -440,7 +507,7 @@ func (h *UserHandler) UpdateBalance(c *gin.Context) {
 		if execErr != nil {
 			return nil, execErr
 		}
-		return dto.UserFromServiceAdmin(user), nil
+		return userDTOForAdminScope(c, user), nil
 	})
 }
 
@@ -450,6 +517,9 @@ func (h *UserHandler) GetUserAPIKeys(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+	if !h.requireRegularUserForRestrictedAdmin(c, userID) {
 		return
 	}
 
@@ -478,6 +548,9 @@ func (h *UserHandler) GetUserUsage(c *gin.Context) {
 		response.BadRequest(c, "Invalid user ID")
 		return
 	}
+	if !h.requireRegularUserForRestrictedAdmin(c, userID) {
+		return
+	}
 
 	period := c.DefaultQuery("period", "month")
 
@@ -498,6 +571,9 @@ func (h *UserHandler) GetBalanceHistory(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+	if !h.requireRegularUserForRestrictedAdmin(c, userID) {
 		return
 	}
 
@@ -569,6 +645,9 @@ func (h *UserHandler) GetUserRPMStatus(c *gin.Context) {
 	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+	if !h.requireRegularUserForRestrictedAdmin(c, userID) {
 		return
 	}
 

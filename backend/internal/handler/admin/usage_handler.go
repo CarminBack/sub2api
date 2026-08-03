@@ -42,6 +42,37 @@ func NewUsageHandler(
 	}
 }
 
+func (h *UsageHandler) validateRestrictedUserFilter(c *gin.Context, userID int64) bool {
+	if !middleware.IsRestrictedAdmin(c) || userID <= 0 {
+		return true
+	}
+	user, err := h.adminService.GetUser(c.Request.Context(), userID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return false
+	}
+	if user.Role != service.RoleUser {
+		response.Forbidden(c, "Restricted admins can only inspect regular-user usage")
+		return false
+	}
+	return true
+}
+
+func validateRestrictedUsageScope(c *gin.Context, userID, apiKeyID int64) bool {
+	if !middleware.IsRestrictedAdmin(c) {
+		return true
+	}
+	if c.Query("account_id") != "" || c.Query("group_id") != "" {
+		response.Forbidden(c, "Restricted admins cannot filter by accounts or groups")
+		return false
+	}
+	if apiKeyID > 0 && userID <= 0 {
+		response.BadRequest(c, "user_id is required when filtering by API key")
+		return false
+	}
+	return true
+}
+
 // CreateUsageCleanupTaskRequest represents cleanup task creation request
 type CreateUsageCleanupTaskRequest struct {
 	StartDate   string  `json:"start_date"`
@@ -81,6 +112,9 @@ func (h *UsageHandler) List(c *gin.Context) {
 		}
 		userID = id
 	}
+	if !h.validateRestrictedUserFilter(c, userID) {
+		return
+	}
 
 	if apiKeyIDStr := c.Query("api_key_id"); apiKeyIDStr != "" {
 		id, err := strconv.ParseInt(apiKeyIDStr, 10, 64)
@@ -89,6 +123,9 @@ func (h *UsageHandler) List(c *gin.Context) {
 			return
 		}
 		apiKeyID = id
+	}
+	if !validateRestrictedUsageScope(c, userID, apiKeyID) {
+		return
 	}
 
 	if accountIDStr := c.Query("account_id"); accountIDStr != "" {
@@ -188,10 +225,22 @@ func (h *UsageHandler) List(c *gin.Context) {
 		EndTime:           endTime,
 		ExactTotal:        exactTotal,
 	}
+	if middleware.IsRestrictedAdmin(c) {
+		filters.UserRole = service.RoleUser
+	}
 
 	records, result, err := h.usageService.ListWithFilters(c.Request.Context(), params, filters)
 	if err != nil {
 		response.ErrorFrom(c, err)
+		return
+	}
+
+	if middleware.IsRestrictedAdmin(c) {
+		out := make([]dto.UsageLog, 0, len(records))
+		for i := range records {
+			out = append(out, *dto.UsageLogFromService(&records[i]))
+		}
+		response.Paginated(c, out, result.Total, page, pageSize)
 		return
 	}
 
@@ -215,6 +264,9 @@ func (h *UsageHandler) Stats(c *gin.Context) {
 		}
 		userID = id
 	}
+	if !h.validateRestrictedUserFilter(c, userID) {
+		return
+	}
 
 	if apiKeyIDStr := c.Query("api_key_id"); apiKeyIDStr != "" {
 		id, err := strconv.ParseInt(apiKeyIDStr, 10, 64)
@@ -223,6 +275,9 @@ func (h *UsageHandler) Stats(c *gin.Context) {
 			return
 		}
 		apiKeyID = id
+	}
+	if !validateRestrictedUsageScope(c, userID, apiKeyID) {
+		return
 	}
 
 	if accountIDStr := c.Query("account_id"); accountIDStr != "" {
@@ -328,6 +383,9 @@ func (h *UsageHandler) Stats(c *gin.Context) {
 		StartTime:         &startTime,
 		EndTime:           &endTime,
 	}
+	if middleware.IsRestrictedAdmin(c) {
+		filters.UserRole = service.RoleUser
+	}
 
 	var stats *usagestats.UsageStats
 	// nocache: 绕过缓存直接回源,刷新者本人拿最新;不回写缓存(管理台"我刷新我自己拿最新"语义,非全局失效)。
@@ -349,6 +407,16 @@ func (h *UsageHandler) Stats(c *gin.Context) {
 		c.Header("X-Usage-Stats-Cache", cacheStatusValue(hit))
 	}
 
+	if middleware.IsRestrictedAdmin(c) {
+		restrictedStats := *stats
+		restrictedStats.TotalAccountCost = nil
+		restrictedStats.Endpoints = nil
+		restrictedStats.UpstreamEndpoints = nil
+		restrictedStats.EndpointPaths = nil
+		response.Success(c, &restrictedStats)
+		return
+	}
+
 	response.Success(c, stats)
 }
 
@@ -362,7 +430,11 @@ func (h *UsageHandler) SearchUsers(c *gin.Context) {
 	}
 
 	// Limit to 30 results
-	users, _, err := h.adminService.ListUsers(c.Request.Context(), 1, 30, service.UserListFilters{Search: keyword, IncludeDeleted: true}, "email", "asc")
+	filters := service.UserListFilters{Search: keyword, IncludeDeleted: true}
+	if middleware.IsRestrictedAdmin(c) {
+		filters.Role = service.RoleUser
+	}
+	users, _, err := h.adminService.ListUsers(c.Request.Context(), 1, 30, filters, "email", "asc")
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -401,6 +473,21 @@ func (h *UsageHandler) SearchAPIKeys(c *gin.Context) {
 			return
 		}
 		userID = id
+	}
+	if middleware.IsRestrictedAdmin(c) {
+		if userID <= 0 {
+			response.BadRequest(c, "user_id is required for restricted admins")
+			return
+		}
+		user, err := h.adminService.GetUser(c.Request.Context(), userID)
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+		if user.Role != service.RoleUser {
+			response.Forbidden(c, "Restricted admins can only inspect regular-user API keys")
+			return
+		}
 	}
 
 	keys, err := h.apiKeyService.SearchAPIKeys(c.Request.Context(), userID, keyword, 30)

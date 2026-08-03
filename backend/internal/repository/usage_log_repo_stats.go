@@ -664,6 +664,10 @@ func (r *usageLogRepository) GetStatsWithFilters(ctx context.Context, filters Us
 		conditions = append(conditions, fmt.Sprintf("user_id = $%d", len(args)+1))
 		args = append(args, filters.UserID)
 	}
+	if filters.UserRole != "" {
+		conditions = append(conditions, fmt.Sprintf("user_id IN (SELECT id FROM users WHERE role = $%d)", len(args)+1))
+		args = append(args, filters.UserRole)
+	}
 	if filters.APIKeyID > 0 {
 		conditions = append(conditions, fmt.Sprintf("api_key_id = $%d", len(args)+1))
 		args = append(args, filters.APIKeyID)

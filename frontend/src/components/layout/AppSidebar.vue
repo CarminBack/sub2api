@@ -252,7 +252,7 @@ const isDark = ref(document.documentElement.classList.contains('dark'))
 
 const homePath = computed(() => {
   if (!isAdmin.value) return '/dashboard'
-  return authStore.isPrimaryAdmin ? '/admin/dashboard' : '/admin/users/create'
+  return authStore.isPrimaryAdmin ? '/admin/dashboard' : '/admin/users/managed'
 })
 
 // Track which parent nav groups are expanded
@@ -755,7 +755,11 @@ const customMenuItemsForAdmin = computed(() => {
 // Admin navigation items
 const adminNavItems = computed((): NavItem[] => {
   if (!authStore.isPrimaryAdmin) {
-    return [{ path: '/admin/users/create', label: t('admin.users.createUser'), icon: UsersIcon }]
+    return [
+      { path: '/admin/users/managed', label: t('nav.users'), icon: UsersIcon },
+      { path: '/admin/orders/records', label: t('nav.orderManagement'), icon: OrderIcon },
+      { path: '/admin/usage/managed', label: t('nav.usage'), icon: ChartIcon },
+    ]
   }
 
   const baseItems: NavItem[] = [

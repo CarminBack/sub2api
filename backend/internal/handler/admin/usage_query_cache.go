@@ -14,6 +14,7 @@ type usageStatsCacheKeyData struct {
 	StartTime   string `json:"start_time"`
 	EndTime     string `json:"end_time"`
 	UserID      int64  `json:"user_id"`
+	UserRole    string `json:"user_role"`
 	APIKeyID    int64  `json:"api_key_id"`
 	AccountID   int64  `json:"account_id"`
 	GroupID     int64  `json:"group_id"`
@@ -37,6 +38,7 @@ func usageStatsCacheKey(filters usagestats.UsageLogFilters) string {
 		StartTime:   start,
 		EndTime:     end,
 		UserID:      filters.UserID,
+		UserRole:    filters.UserRole,
 		APIKeyID:    filters.APIKeyID,
 		AccountID:   filters.AccountID,
 		GroupID:     filters.GroupID,

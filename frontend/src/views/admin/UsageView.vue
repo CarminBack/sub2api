@@ -1,9 +1,9 @@
 <template>
   <AppLayout>
     <div class="space-y-6">
-      <UsageStatsCards :stats="usageStats" />
+      <UsageStatsCards :stats="usageStats" :show-account-cost="!props.restricted" />
       <!-- Charts Section -->
-      <div class="space-y-4">
+      <div v-if="!props.restricted" class="space-y-4">
         <div class="card p-4">
           <div class="flex flex-wrap items-center gap-4">
             <div class="flex items-center gap-2">
@@ -83,7 +83,7 @@
           </button>
         </div>
 
-        <UsageFilters v-model="filters" ref="usageFiltersRef" flat :mode="activeTab" class="border-b border-gray-100 dark:border-dark-700/50" :start-date="startDate" :end-date="endDate" :exporting="exporting" :model-options="modelNameOptions" @change="applyFilters" @refresh="refreshData" @reset="resetFilters" @cleanup="openCleanupDialog" @export="exportToExcel">
+        <UsageFilters v-model="filters" ref="usageFiltersRef" flat :mode="activeTab" :restricted="props.restricted" class="border-b border-gray-100 dark:border-dark-700/50" :start-date="startDate" :end-date="endDate" :exporting="exporting" :model-options="modelNameOptions" @change="applyFilters" @refresh="refreshData" @reset="resetFilters" @cleanup="openCleanupDialog" @export="exportToExcel">
           <template #after-reset>
             <div v-if="activeTab !== 'ranking'" class="relative" ref="columnDropdownRef">
               <button
@@ -126,6 +126,8 @@
             :data="usageLogs"
             :loading="loading"
             :columns="visibleColumns"
+            :show-account-billing="!props.restricted"
+            :show-upstream-endpoint="!props.restricted"
             :server-side-sort="true"
             :default-sort-key="'created_at'"
             :default-sort-order="'desc'"
@@ -135,7 +137,7 @@
           />
           <Pagination v-if="pagination.total > 0" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="handlePageChange" @update:pageSize="handlePageSizeChange" />
         </div>
-        <div v-show="activeTab === 'errors'" class="overflow-hidden rounded-b-2xl">
+        <div v-if="!props.restricted" v-show="activeTab === 'errors'" class="overflow-hidden rounded-b-2xl">
           <OpsErrorLogTable
             flat
             :rows="errRows" :total="errTotal" :loading="errLoading"
@@ -150,7 +152,7 @@
             @ipGeoBatchFailed="handleIpGeoBatchFailed" />
         </div>
         <!-- 懒挂载：首次切到该 tab 才请求排行数据，之后随筛选自动刷新 -->
-        <div v-if="rankingMounted" v-show="activeTab === 'ranking'" class="overflow-hidden rounded-b-2xl">
+        <div v-if="!props.restricted && rankingMounted" v-show="activeTab === 'ranking'" class="overflow-hidden rounded-b-2xl">
           <UserTokenRanking
             ref="rankingRef"
             :start-date="startDate"
@@ -161,11 +163,12 @@
           />
         </div>
       </div>
-      <OpsErrorDetailModal v-model:show="showErrorModal" :error-id="selectedErrorId" :error-type="'request'" />
+      <OpsErrorDetailModal v-if="!props.restricted" v-model:show="showErrorModal" :error-id="selectedErrorId" :error-type="'request'" />
     </div>
   </AppLayout>
   <UsageExportProgress :show="exportProgress.show" :progress="exportProgress.progress" :current="exportProgress.current" :total="exportProgress.total" :estimated-time="exportProgress.estimatedTime" @cancel="cancelExport" />
   <UsageCleanupDialog
+    v-if="!props.restricted"
     :show="cleanupDialogVisible"
     :filters="filters"
     :start-date="startDate"
@@ -204,6 +207,10 @@ import ModelDistributionChart from '@/components/charts/ModelDistributionChart.v
 import EndpointDistributionChart from '@/components/charts/EndpointDistributionChart.vue'
 import Icon from '@/components/icons/Icon.vue'
 import type { AdminUsageLog, TrendDataPoint, ModelStat, GroupStat, EndpointStat, AdminUser } from '@/types'; import type { AdminUsageStatsResponse, AdminUsageQueryParams } from '@/api/admin/usage'
+
+const props = withDefaults(defineProps<{ restricted?: boolean }>(), {
+  restricted: false,
+})
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -515,8 +522,10 @@ const applyFilters = () => {
   invalidateModelStatsCache()
   loadLogs()
   loadStats()
-  loadModelStats(modelDistributionSource.value, true)
-  loadChartData()
+  if (!props.restricted) {
+    loadModelStats(modelDistributionSource.value, true)
+    loadChartData()
+  }
   errPage.value = 1
   if (activeTab.value === 'errors') {
     loadAdminErrors()
@@ -528,8 +537,10 @@ const refreshData = () => {
   invalidateModelStatsCache()
   loadLogs()
   loadStats(true)
-  loadModelStats(modelDistributionSource.value, true)
-  loadChartData()
+  if (!props.restricted) {
+    loadModelStats(modelDistributionSource.value, true)
+    loadChartData()
+  }
   if (activeTab.value === 'errors') loadAdminErrors()
   if (rankingMounted.value) rankingRef.value?.reload()
 }
@@ -626,8 +637,9 @@ const ALWAYS_VISIBLE = ['user', 'created_at']
 const DEFAULT_HIDDEN_COLUMNS = ['reasoning_effort', 'user_agent']
 const HIDDEN_COLUMNS_KEY = 'usage-hidden-columns'
 
-const allColumns = computed(() => [
-  { key: 'user', label: t('admin.usage.user'), sortable: false },
+const allColumns = computed(() => {
+  const columns = [
+    { key: 'user', label: t('admin.usage.user'), sortable: false },
   { key: 'api_key', label: t('usage.apiKeyFilter'), sortable: false },
   { key: 'account', label: t('admin.usage.account'), sortable: false },
   { key: 'model', label: t('usage.model'), sortable: true },
@@ -641,8 +653,11 @@ const allColumns = computed(() => [
   { key: 'latency', label: t('usage.latency'), sortable: false },
   { key: 'created_at', label: t('usage.time'), sortable: true },
   { key: 'user_agent', label: t('usage.userAgent'), sortable: false },
-  { key: 'ip_address', label: t('admin.usage.ipAddress'), sortable: false }
-])
+    { key: 'ip_address', label: t('admin.usage.ipAddress'), sortable: false }
+  ]
+  if (!props.restricted) return columns
+  return columns.filter((column) => !['account', 'group'].includes(column.key))
+})
 
 const hiddenColumns = reactive<Set<string>>(new Set())
 
@@ -761,11 +776,14 @@ const loadSavedColumns = () => {
 // Detail tabs
 type DetailTab = 'usage' | 'errors' | 'ranking'
 const activeTab = ref<DetailTab>('usage')
-const detailTabs = computed(() => [
-  { key: 'usage' as const, label: t('usage.tabs.usage'), icon: 'document' as const },
-  { key: 'errors' as const, label: t('usage.tabs.errors'), icon: 'exclamationTriangle' as const },
-  { key: 'ranking' as const, label: t('usage.tabs.ranking'), icon: 'chart' as const },
-])
+const detailTabs = computed(() => {
+  const tabs = [
+    { key: 'usage' as const, label: t('usage.tabs.usage'), icon: 'document' as const },
+    { key: 'errors' as const, label: t('usage.tabs.errors'), icon: 'exclamationTriangle' as const },
+    { key: 'ranking' as const, label: t('usage.tabs.ranking'), icon: 'chart' as const },
+  ]
+  return props.restricted ? tabs.slice(0, 1) : tabs
+})
 const usageFiltersRef = ref<InstanceType<typeof UsageFilters> | null>(null)
 const rankingMounted = ref(false)
 const rankingRef = ref<InstanceType<typeof UserTokenRanking> | null>(null)
@@ -845,18 +863,20 @@ onMounted(() => {
   void loadRouteUserFilterLabel()
   loadLogs()
   loadStats()
-  loadModelStats(modelDistributionSource.value, true)
-  window.setTimeout(() => {
-    void loadChartData()
-  }, 120)
+  if (!props.restricted) {
+    loadModelStats(modelDistributionSource.value, true)
+    window.setTimeout(() => {
+      void loadChartData()
+    }, 120)
+  }
   loadSavedColumns()
-  loadSavedErrColumns()
+  if (!props.restricted) loadSavedErrColumns()
   document.addEventListener('click', handleColumnClickOutside)
 })
 onUnmounted(() => { abortController?.abort(); exportAbortController?.abort(); document.removeEventListener('click', handleColumnClickOutside) })
 
 watch(modelDistributionSource, (source) => {
-  void loadModelStats(source)
+  if (!props.restricted) void loadModelStats(source)
 })
 
 defineExpose({ requestedModelStats, refreshData })
