@@ -50,7 +50,7 @@ func newRestrictedAdminUserTestRouter(stub *restrictedAdminServiceStub) *gin.Eng
 	router.POST("/admin/users", handler.Create)
 	router.PUT("/admin/users/:id", handler.Update)
 	router.DELETE("/admin/users/:id", handler.Delete)
-	router.POST("/admin/users/:id/balance", handler.UpdateBalance)
+	router.POST("/admin/users/:id/balance", middleware.PrimaryAdminOnly(), handler.UpdateBalance)
 	return router
 }
 
@@ -144,7 +144,7 @@ func TestRestrictedAdminCannotManageAdminTargets(t *testing.T) {
 	}
 }
 
-func TestRestrictedAdminCanDeleteAndAdjustRegularUser(t *testing.T) {
+func TestRestrictedAdminCanDeleteButCannotAdjustRegularUserBalance(t *testing.T) {
 	stub := newRestrictedAdminServiceStub()
 	router := newRestrictedAdminUserTestRouter(stub)
 
@@ -156,6 +156,6 @@ func TestRestrictedAdminCanDeleteAndAdjustRegularUser(t *testing.T) {
 	balanceRec := doJSON(t, router, http.MethodPost, "/admin/users/10/balance", map[string]any{
 		"balance": 5, "operation": "add", "notes": "downstream adjustment",
 	})
-	require.Equal(t, http.StatusOK, balanceRec.Code)
-	require.Equal(t, int64(10), stub.lastBalanceUserID)
+	require.Equal(t, http.StatusForbidden, balanceRec.Code)
+	require.Zero(t, stub.lastBalanceUserID)
 }

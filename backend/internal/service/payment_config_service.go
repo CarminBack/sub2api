@@ -25,6 +25,7 @@ const (
 	SettingLoadBalanceStrategy = "LOAD_BALANCE_STRATEGY"
 	SettingBalancePayDisabled  = "BALANCE_PAYMENT_DISABLED"
 	SettingBalanceRechargeMult = "BALANCE_RECHARGE_MULTIPLIER"
+	SettingBalanceRechargeMin  = "BALANCE_RECHARGE_MULTIPLIER_MIN"
 	// SettingSubscriptionUSDToCNYRate 是订阅 CNY 换算汇率（1 USD = X CNY）。
 	// 0/未配置 = 关闭换算（订阅按 price 数值直付），显式配置后 CNY 通道订阅按 price × rate 收款。
 	SettingSubscriptionUSDToCNYRate      = "SUBSCRIPTION_USD_TO_CNY_RATE"
@@ -59,6 +60,7 @@ type PaymentConfig struct {
 	EnabledTypes              []string `json:"enabled_payment_types"`
 	BalanceDisabled           bool     `json:"balance_disabled"`
 	BalanceRechargeMultiplier float64  `json:"balance_recharge_multiplier"`
+	BalanceRechargeMinimum    float64  `json:"balance_recharge_multiplier_min"`
 	// SubscriptionUSDToCNYRate 为 0 时订阅换算关闭（兼容存量行为）。
 	SubscriptionUSDToCNYRate float64 `json:"subscription_usd_to_cny_rate"`
 	RechargeFeeRate          float64 `json:"recharge_fee_rate"`
@@ -93,6 +95,7 @@ type UpdatePaymentConfigRequest struct {
 	EnabledTypes              []string `json:"enabled_payment_types"`
 	BalanceDisabled           *bool    `json:"balance_disabled"`
 	BalanceRechargeMultiplier *float64 `json:"balance_recharge_multiplier"`
+	BalanceRechargeMinimum    *float64 `json:"balance_recharge_multiplier_min"`
 	SubscriptionUSDToCNYRate  *float64 `json:"subscription_usd_to_cny_rate"`
 	RechargeFeeRate           *float64 `json:"recharge_fee_rate"`
 	LoadBalanceStrategy       *string  `json:"load_balance_strategy"`
@@ -128,6 +131,12 @@ type MethodLimits struct {
 	DailyLimit  float64 `json:"daily_limit"`
 	SingleMin   float64 `json:"single_min"`
 	SingleMax   float64 `json:"single_max"`
+}
+
+// RechargeMultiplierConfig is the restricted payment configuration exposed to downstream admins.
+type RechargeMultiplierConfig struct {
+	Multiplier float64 `json:"balance_recharge_multiplier"`
+	Minimum    float64 `json:"balance_recharge_multiplier_min"`
 }
 
 // MethodLimitsResponse is the full response for the user-facing /limits API.
@@ -219,7 +228,7 @@ func (s *PaymentConfigService) GetPaymentConfig(ctx context.Context) (*PaymentCo
 	keys := []string{
 		SettingPaymentEnabled, SettingMinRechargeAmount, SettingMaxRechargeAmount,
 		SettingDailyRechargeLimit, SettingOrderTimeoutMinutes, SettingMaxPendingOrders,
-		SettingEnabledPaymentTypes, SettingBalancePayDisabled, SettingBalanceRechargeMult, SettingSubscriptionUSDToCNYRate, SettingRechargeFeeRate, SettingLoadBalanceStrategy,
+		SettingEnabledPaymentTypes, SettingBalancePayDisabled, SettingBalanceRechargeMult, SettingBalanceRechargeMin, SettingSubscriptionUSDToCNYRate, SettingRechargeFeeRate, SettingLoadBalanceStrategy,
 		SettingProductNamePrefix, SettingProductNameSuffix,
 		SettingHelpImageURL, SettingHelpText,
 		SettingCancelRateLimitOn, SettingCancelRateLimitMax,
@@ -239,6 +248,7 @@ func (s *PaymentConfigService) GetPaymentConfig(ctx context.Context) (*PaymentCo
 }
 
 func (s *PaymentConfigService) parsePaymentConfig(vals map[string]string) *PaymentConfig {
+	multiplier := normalizeBalanceRechargeMultiplier(pcParseFloat(vals[SettingBalanceRechargeMult], defaultBalanceRechargeMultiplier))
 	cfg := &PaymentConfig{
 		Enabled:                   vals[SettingPaymentEnabled] == "true",
 		MinAmount:                 pcParseFloat(vals[SettingMinRechargeAmount], 1),
@@ -247,7 +257,8 @@ func (s *PaymentConfigService) parsePaymentConfig(vals map[string]string) *Payme
 		OrderTimeoutMin:           pcParseInt(vals[SettingOrderTimeoutMinutes], defaultOrderTimeoutMin),
 		MaxPendingOrders:          pcParseInt(vals[SettingMaxPendingOrders], defaultMaxPendingOrders),
 		BalanceDisabled:           vals[SettingBalancePayDisabled] == "true",
-		BalanceRechargeMultiplier: normalizeBalanceRechargeMultiplier(pcParseFloat(vals[SettingBalanceRechargeMult], defaultBalanceRechargeMultiplier)),
+		BalanceRechargeMultiplier: multiplier,
+		BalanceRechargeMinimum:    normalizeBalanceRechargeMinimum(pcParseFloat(vals[SettingBalanceRechargeMin], multiplier), multiplier),
 		SubscriptionUSDToCNYRate:  normalizeSubscriptionUSDToCNYRate(pcParseFloat(vals[SettingSubscriptionUSDToCNYRate], 0)),
 		RechargeFeeRate:           pcParseFloat(vals[SettingRechargeFeeRate], 0),
 		LoadBalanceStrategy:       vals[SettingLoadBalanceStrategy],
@@ -322,10 +333,8 @@ func (s *PaymentConfigService) getStripePublishableKey(ctx context.Context) stri
 // nil-check before serialisation — this is inherent to patch-style update patterns
 // and cannot be meaningfully decomposed without introducing unnecessary abstraction.
 func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req UpdatePaymentConfigRequest) error {
-	if req.BalanceRechargeMultiplier != nil {
-		if math.IsNaN(*req.BalanceRechargeMultiplier) || math.IsInf(*req.BalanceRechargeMultiplier, 0) || *req.BalanceRechargeMultiplier <= 0 {
-			return infraerrors.BadRequest("INVALID_BALANCE_RECHARGE_MULTIPLIER", "balance recharge multiplier must be greater than 0")
-		}
+	if err := s.validateRechargeMultiplierUpdate(ctx, req.BalanceRechargeMultiplier, req.BalanceRechargeMinimum); err != nil {
+		return err
 	}
 	if req.SubscriptionUSDToCNYRate != nil {
 		v := *req.SubscriptionUSDToCNYRate
@@ -370,6 +379,9 @@ func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req Upda
 	}
 	if req.BalanceRechargeMultiplier != nil {
 		m[SettingBalanceRechargeMult] = formatPositiveFloat(req.BalanceRechargeMultiplier)
+	}
+	if req.BalanceRechargeMinimum != nil {
+		m[SettingBalanceRechargeMin] = formatPositiveFloat(req.BalanceRechargeMinimum)
 	}
 	if req.SubscriptionUSDToCNYRate != nil {
 		m[SettingSubscriptionUSDToCNYRate] = formatPositiveFloatExact(req.SubscriptionUSDToCNYRate)
@@ -426,6 +438,69 @@ func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req Upda
 		m[SettingPaymentVisibleMethodWxpayEnabled] = formatBoolOrEmpty(req.VisibleMethodWxpayEnabled)
 	}
 	return s.settingRepo.SetMultiple(ctx, m)
+}
+
+// GetRechargeMultiplierConfig returns only the settings downstream admins may inspect.
+func (s *PaymentConfigService) GetRechargeMultiplierConfig(ctx context.Context) (*RechargeMultiplierConfig, error) {
+	vals, err := s.settingRepo.GetMultiple(ctx, []string{SettingBalanceRechargeMult, SettingBalanceRechargeMin})
+	if err != nil {
+		return nil, fmt.Errorf("get recharge multiplier settings: %w", err)
+	}
+	multiplier := normalizeBalanceRechargeMultiplier(pcParseFloat(vals[SettingBalanceRechargeMult], defaultBalanceRechargeMultiplier))
+	return &RechargeMultiplierConfig{
+		Multiplier: multiplier,
+		Minimum:    normalizeBalanceRechargeMinimum(pcParseFloat(vals[SettingBalanceRechargeMin], multiplier), multiplier),
+	}, nil
+}
+
+// UpdateRechargeMultiplier updates the only payment setting delegated to downstream admins.
+func (s *PaymentConfigService) UpdateRechargeMultiplier(ctx context.Context, multiplier float64) error {
+	if err := s.validateRechargeMultiplierUpdate(ctx, &multiplier, nil); err != nil {
+		return err
+	}
+	return s.settingRepo.SetMultiple(ctx, map[string]string{
+		SettingBalanceRechargeMult: formatPositiveFloat(&multiplier),
+	})
+}
+
+func (s *PaymentConfigService) validateRechargeMultiplierUpdate(ctx context.Context, multiplier, minimum *float64) error {
+	if multiplier != nil && !validPositiveFinite(*multiplier) {
+		return infraerrors.BadRequest("INVALID_BALANCE_RECHARGE_MULTIPLIER", "balance recharge multiplier must be greater than 0")
+	}
+	if minimum != nil && !validPositiveFinite(*minimum) {
+		return infraerrors.BadRequest("INVALID_BALANCE_RECHARGE_MULTIPLIER_MIN", "minimum balance recharge multiplier must be greater than 0")
+	}
+	if multiplier == nil && minimum == nil {
+		return nil
+	}
+
+	current, err := s.GetRechargeMultiplierConfig(ctx)
+	if err != nil {
+		return err
+	}
+	effectiveMultiplier := current.Multiplier
+	effectiveMinimum := current.Minimum
+	if multiplier != nil {
+		effectiveMultiplier = *multiplier
+	}
+	if minimum != nil {
+		effectiveMinimum = *minimum
+	}
+	if effectiveMultiplier < effectiveMinimum {
+		return infraerrors.BadRequest("BALANCE_RECHARGE_MULTIPLIER_BELOW_MIN", "balance recharge multiplier cannot be lower than the configured minimum")
+	}
+	return nil
+}
+
+func normalizeBalanceRechargeMinimum(minimum, fallback float64) float64 {
+	if !validPositiveFinite(minimum) {
+		return fallback
+	}
+	return minimum
+}
+
+func validPositiveFinite(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0) && value > 0
 }
 
 func formatBoolOrEmpty(v *bool) string {

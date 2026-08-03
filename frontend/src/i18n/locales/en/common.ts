@@ -188,6 +188,7 @@ export default {
     orderManagement: 'Orders',
     paymentDashboard: 'Payment Dashboard',
     paymentConfig: 'Payment Config',
+    rechargeMultiplier: 'Recharge Multiplier',
     paymentPlans: 'Plans',
     channelManagement: 'Channels',
     channelPricing: 'Channel Pricing',

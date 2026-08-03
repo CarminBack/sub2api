@@ -438,6 +438,7 @@
                 </div>
               </div>
               <button
+                v-if="!props.restricted"
                 @click.stop="handleDeposit(row)"
                 class="rounded px-2 py-0.5 text-xs font-medium text-emerald-600 transition-colors hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/20"
                 :title="t('admin.users.deposit')"
@@ -696,6 +697,7 @@
 
               <!-- Deposit -->
               <button
+                v-if="!props.restricted"
                 @click="handleDeposit(user); closeActionMenu()"
                 class="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
               >
@@ -705,6 +707,7 @@
 
               <!-- Withdraw -->
               <button
+                v-if="!props.restricted"
                 @click="handleWithdraw(user); closeActionMenu()"
                 class="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
               >
@@ -769,8 +772,8 @@
     />
     <UserApiKeysModal :show="showApiKeysModal" :user="viewingUser" @close="closeApiKeysModal" />
     <UserAllowedGroupsModal v-if="!props.restricted" :show="showAllowedGroupsModal" :user="allowedGroupsUser" @close="closeAllowedGroupsModal" @success="loadUsers" />
-    <UserBalanceModal :show="showBalanceModal" :user="balanceUser" :operation="balanceOperation" @close="closeBalanceModal" @success="loadUsers" />
-    <UserBalanceHistoryModal :show="showBalanceHistoryModal" :user="balanceHistoryUser" @close="closeBalanceHistoryModal" @deposit="handleDepositFromHistory" @withdraw="handleWithdrawFromHistory" />
+    <UserBalanceModal v-if="!props.restricted" :show="showBalanceModal" :user="balanceUser" :operation="balanceOperation" @close="closeBalanceModal" @success="loadUsers" />
+    <UserBalanceHistoryModal :show="showBalanceHistoryModal" :user="balanceHistoryUser" :hide-actions="props.restricted" @close="closeBalanceHistoryModal" @deposit="handleDepositFromHistory" @withdraw="handleWithdrawFromHistory" />
     <GroupReplaceModal v-if="!props.restricted" :show="showGroupReplaceModal" :user="groupReplaceUser" :old-group="groupReplaceOldGroup" :all-groups="allGroups" @close="closeGroupReplaceModal" @success="loadUsers" />
     <UserAttributesConfigModal v-if="!props.restricted" :show="showAttributesModal" @close="handleAttributesModalClose" />
   </AppLayout>

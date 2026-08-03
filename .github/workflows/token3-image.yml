@@ -35,5 +35,5 @@ jobs:
             ghcr.io/carminback/sub2api:token3-restricted-admin
             ghcr.io/carminback/sub2api:sha-${{ github.sha }}
           build-args: |
-            VERSION=0.1.170-token3.1
+            VERSION=0.1.170-token3.2
             COMMIT=${{ github.sha }}
