@@ -63,7 +63,8 @@ type stubAdminService struct {
 		sortOrder string
 		calls     int
 	}
-	lastListProxies struct {
+	lastCreateUserInput *service.CreateUserInput
+	lastListProxies     struct {
 		protocol  string
 		status    string
 		search    string
@@ -175,7 +176,9 @@ func (s *stubAdminService) GetUserIncludeDeleted(ctx context.Context, id int64) 
 }
 
 func (s *stubAdminService) CreateUser(ctx context.Context, input *service.CreateUserInput) (*service.User, error) {
-	user := service.User{ID: 100, Email: input.Email, Status: service.StatusActive}
+	copyInput := *input
+	s.lastCreateUserInput = &copyInput
+	user := service.User{ID: 100, Email: input.Email, Role: input.Role, Status: service.StatusActive}
 	return &user, nil
 }
 

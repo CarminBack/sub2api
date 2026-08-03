@@ -438,6 +438,17 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/users/create',
+    name: 'AdminCreateRegularUser',
+    component: () => import('@/views/admin/CreateRegularUserView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Create User',
+      titleKey: 'admin.users.createUser'
+    }
+  },
+  {
     path: '/admin/users',
     name: 'AdminUsers',
     component: () => import('@/views/admin/UsersView.vue'),
@@ -874,6 +885,16 @@ router.beforeEach(async (to, _from, next) => {
   if (requiresAdmin && !authStore.isAdmin) {
     // User is authenticated but not admin, redirect to user dashboard
     next('/dashboard')
+    return
+  }
+
+  if (
+    requiresAdmin &&
+    authStore.isAdmin &&
+    !authStore.isPrimaryAdmin &&
+    to.path !== '/admin/users/create'
+  ) {
+    next('/admin/users/create')
     return
   }
 

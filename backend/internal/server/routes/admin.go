@@ -25,11 +25,15 @@ func RegisterAdminRoutes(
 	admin.Use(panelRateLimiter.Global())
 	// 审计中间件挂在认证之后：所有管理面变更类操作 + 敏感读取入审计日志
 	admin.Use(gin.HandlerFunc(auditLog))
+
+	// 所有管理员都可完成合规确认；受限管理员确认后只能创建普通用户。
+	registerAdminComplianceRoutes(admin, h)
+	admin.POST("/users/regular", middleware.AdminComplianceGuard(settingService), h.Admin.User.CreateRegular)
+
+	// 初始安装管理员是唯一拥有完整管理面的主账号。
+	admin.Use(middleware.PrimaryAdminOnly())
 	admin.Use(middleware.AdminComplianceGuard(settingService))
 	{
-		// 部署与运营合规确认
-		registerAdminComplianceRoutes(admin, h)
-
 		// 仪表盘
 		registerDashboardRoutes(admin, h)
 

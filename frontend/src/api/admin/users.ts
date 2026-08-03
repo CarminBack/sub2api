@@ -142,6 +142,16 @@ export async function create(userData: {
   return data
 }
 
+/** Create an ordinary user through the restricted-admin endpoint. */
+export async function createRegular(userData: {
+  email: string
+  password: string
+  username?: string
+}): Promise<AdminUser> {
+  const { data } = await apiClient.post<AdminUser>('/admin/users/regular', userData)
+  return data
+}
+
 /**
  * Update user
  * @param id - User ID
@@ -403,6 +413,7 @@ export const usersAPI = {
   list,
   getById,
   create,
+  createRegular,
   update,
   delete: deleteUser,
   updateBalance,

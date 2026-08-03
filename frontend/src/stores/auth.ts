@@ -90,6 +90,9 @@ export const useAuthStore = defineStore('auth', () => {
     return user.value?.role === 'admin'
   })
 
+  // The initial setup account is the installation owner and retains full admin access.
+  const isPrimaryAdmin = computed(() => isAdmin.value && user.value?.id === 1)
+
   const isSimpleMode = computed(() => runMode.value === 'simple')
   const hasPendingAuthSession = computed(() => pendingAuthSession.value !== null)
 
@@ -492,6 +495,7 @@ export const useAuthStore = defineStore('auth', () => {
     // Computed
     isAuthenticated,
     isAdmin,
+    isPrimaryAdmin,
     isSimpleMode,
     hasPendingAuthSession,
 

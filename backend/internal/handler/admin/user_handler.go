@@ -70,6 +70,13 @@ type CreateUserRequest struct {
 	AllowedGroups []int64  `json:"allowed_groups"`
 }
 
+// CreateRegularUserRequest is the only user payload accepted from restricted admins.
+type CreateRegularUserRequest struct {
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required,min=6"`
+	Username string `json:"username"`
+}
+
 // UpdateUserRequest represents admin update user request
 // 使用指针类型来区分"未提供"和"设置为0"
 type UpdateUserRequest struct {
@@ -294,6 +301,31 @@ func (h *UserHandler) Create(c *gin.Context) {
 		RPMLimit:      req.RPMLimit,
 		AllowedGroups: req.AllowedGroups,
 		ActorAdminID:  getAdminIDFromContext(c),
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, dto.UserFromServiceAdmin(user))
+}
+
+// CreateRegular creates an ordinary user with server defaults.
+// POST /api/v1/admin/users/regular
+func (h *UserHandler) CreateRegular(c *gin.Context) {
+	var req CreateRegularUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+
+	user, err := h.adminService.CreateUser(c.Request.Context(), &service.CreateUserInput{
+		Email:        req.Email,
+		Password:     req.Password,
+		Username:     req.Username,
+		Role:         service.RoleUser,
+		Concurrency:  1,
+		ActorAdminID: getAdminIDFromContext(c),
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)

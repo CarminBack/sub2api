@@ -102,7 +102,7 @@
         </div>
 
         <!-- Personal Section for Admin (hidden in simple mode) -->
-        <div v-if="!authStore.isSimpleMode" class="sidebar-section">
+        <div v-if="authStore.isPrimaryAdmin && !authStore.isSimpleMode" class="sidebar-section">
           <div class="sidebar-section-title" :class="{ 'sidebar-section-title-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">
             <span class="sidebar-section-title-text" :class="{ 'sidebar-section-title-text-collapsed': sidebarCollapsed }">
               {{ t('nav.myAccount') }}
@@ -250,7 +250,10 @@ const isAdmin = computed(() => authStore.isAdmin)
 const sidebarNavRef = ref<HTMLElement | null>(null)
 const isDark = ref(document.documentElement.classList.contains('dark'))
 
-const homePath = computed(() => (isAdmin.value ? '/admin/dashboard' : '/dashboard'))
+const homePath = computed(() => {
+  if (!isAdmin.value) return '/dashboard'
+  return authStore.isPrimaryAdmin ? '/admin/dashboard' : '/admin/users/create'
+})
 
 // Track which parent nav groups are expanded
 const expandedGroups = ref<Set<string>>(new Set())
@@ -751,6 +754,10 @@ const customMenuItemsForAdmin = computed(() => {
 
 // Admin navigation items
 const adminNavItems = computed((): NavItem[] => {
+  if (!authStore.isPrimaryAdmin) {
+    return [{ path: '/admin/users/create', label: t('admin.users.createUser'), icon: UsersIcon }]
+  }
+
   const baseItems: NavItem[] = [
     { path: '/admin/dashboard', label: t('nav.dashboard'), icon: DashboardIcon },
     { path: '/admin/ops', label: t('nav.ops'), icon: ChartIcon, featureFlag: flagOpsMonitoring },
@@ -924,7 +931,7 @@ if (
 
 // Fetch admin settings (for feature-gated nav items like Ops).
 watch(
-  isAdmin,
+  () => authStore.isPrimaryAdmin,
   (v) => {
     if (v) {
       adminSettingsStore.fetch()
@@ -935,7 +942,7 @@ watch(
 
 onMounted(() => {
   void refreshBatchImageAccess()
-  if (isAdmin.value) {
+  if (authStore.isPrimaryAdmin) {
     adminSettingsStore.fetch()
   }
   // Restore sidebar scroll position after route change re-mounts the component

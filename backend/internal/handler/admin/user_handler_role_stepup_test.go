@@ -31,6 +31,7 @@ func setupRoleStepUpRouter(t *testing.T) (*gin.Engine, *stubAdminService) {
 
 	h := NewUserHandler(adminSvc, nil, nil, nil, nil, nil, nil)
 	router.POST("/api/v1/admin/users", h.Create)
+	router.POST("/api/v1/admin/users/regular", h.CreateRegular)
 	router.PUT("/api/v1/admin/users/:id", h.Update)
 	return router, adminSvc
 }
@@ -83,4 +84,27 @@ func TestCreateRegularUserSkipsStepUp(t *testing.T) {
 		"email": "new-user@example.com", "password": "pass123", "role": "user",
 	})
 	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestCreateRegularEndpointForcesOrdinaryUserDefaults(t *testing.T) {
+	router, adminSvc := setupRoleStepUpRouter(t)
+
+	rec := doJSON(t, router, http.MethodPost, "/api/v1/admin/users/regular", map[string]any{
+		"email":          "restricted-created@example.com",
+		"password":       "pass123",
+		"username":       "restricted-created",
+		"role":           "admin",
+		"balance":        999999,
+		"concurrency":    100,
+		"rpm_limit":      1000,
+		"allowed_groups": []int64{1, 2, 3},
+	})
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotNil(t, adminSvc.lastCreateUserInput)
+	require.Equal(t, service.RoleUser, adminSvc.lastCreateUserInput.Role)
+	require.Nil(t, adminSvc.lastCreateUserInput.Balance)
+	require.Equal(t, 1, adminSvc.lastCreateUserInput.Concurrency)
+	require.Zero(t, adminSvc.lastCreateUserInput.RPMLimit)
+	require.Empty(t, adminSvc.lastCreateUserInput.AllowedGroups)
 }

@@ -105,6 +105,31 @@ describe('useAuthStore', () => {
     })
   })
 
+  describe('admin scope', () => {
+    it('treats the initial admin as the primary admin', async () => {
+      mockLogin.mockResolvedValue({
+        ...fakeAuthResponse,
+        user: { ...fakeAdminUser, id: 1 },
+      })
+      const store = useAuthStore()
+
+      await store.login({ email: 'owner@example.com', password: '123456' })
+
+      expect(store.isAdmin).toBe(true)
+      expect(store.isPrimaryAdmin).toBe(true)
+    })
+
+    it('keeps later admins out of the primary admin scope', async () => {
+      mockLogin.mockResolvedValue({ ...fakeAuthResponse, user: fakeAdminUser })
+      const store = useAuthStore()
+
+      await store.login({ email: 'admin@example.com', password: '123456' })
+
+      expect(store.isAdmin).toBe(true)
+      expect(store.isPrimaryAdmin).toBe(false)
+    })
+  })
+
   // --- login2FA ---
 
   describe('login2FA', () => {
