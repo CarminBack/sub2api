@@ -91,7 +91,7 @@ func TestRestrictedAdminUsageIsLimitedToToday(t *testing.T) {
 
 	for _, path := range []string{
 		"/admin/usage?timezone=UTC&start_date=2000-01-01&end_date=2000-01-02",
-		"/admin/usage/stats?timezone=UTC&period=month&start_date=2000-01-01&end_date=2000-01-02",
+		"/admin/usage/stats?timezone=UTC&period=month&start_date=2000-01-01&end_date=2000-01-02&nocache=true",
 	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
