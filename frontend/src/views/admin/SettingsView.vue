@@ -7100,7 +7100,7 @@
                   </div>
                 </div>
                 <!-- Row 2: Balance toggle + amounts -->
-                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
                   <div>
                     <label class="input-label">{{
                       t("admin.settings.payment.minAmount")
@@ -7172,7 +7172,7 @@
                       "
                       type="number"
                       step="0.01"
-                      :min="form.payment_balance_recharge_multiplier_min || 0.01"
+                      min="0.01"
                       class="input"
                     />
                     <p class="mt-0.5 text-xs text-gray-400">
@@ -7192,31 +7192,6 @@
                             1
                           ).toFixed(2),
                         })
-                      }}
-                    </p>
-                  </div>
-                  <div>
-                    <label class="input-label">{{
-                      t("admin.settings.payment.balanceRechargeMultiplierMin")
-                    }}</label>
-                    <input
-                      :value="form.payment_balance_recharge_multiplier_min || ''"
-                      @input="
-                        form.payment_balance_recharge_multiplier_min =
-                          parseFloat(
-                            ($event.target as HTMLInputElement).value,
-                          ) || 1
-                      "
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      class="input"
-                    />
-                    <p class="mt-0.5 text-xs text-gray-400">
-                      {{
-                        t(
-                          "admin.settings.payment.balanceRechargeMultiplierMinHint",
-                        )
                       }}
                     </p>
                   </div>
@@ -8889,7 +8864,6 @@ const form = reactive<SettingsForm>({
   payment_order_timeout_minutes: 30,
   payment_balance_disabled: false,
   payment_balance_recharge_multiplier: 1,
-  payment_balance_recharge_multiplier_min: 1,
   payment_subscription_usd_to_cny_rate: 0,
   payment_recharge_fee_rate: 0,
   payment_enabled_types: [],
@@ -10564,8 +10538,6 @@ async function saveSettings() {
       payment_balance_disabled: form.payment_balance_disabled,
       payment_balance_recharge_multiplier:
         Number(form.payment_balance_recharge_multiplier) || 1,
-      payment_balance_recharge_multiplier_min:
-        Number(form.payment_balance_recharge_multiplier_min) || 1,
       payment_subscription_usd_to_cny_rate:
         Number(form.payment_subscription_usd_to_cny_rate) || 0,
       payment_recharge_fee_rate: Number(form.payment_recharge_fee_rate) || 0,

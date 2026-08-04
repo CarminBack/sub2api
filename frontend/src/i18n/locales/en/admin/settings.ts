@@ -608,8 +608,6 @@ export default {
         dailyLimit: 'Daily Limit',
         balanceRechargeMultiplier: 'Balance Recharge Multiplier',
         balanceRechargeMultiplierHint: 'How many USD balance the user receives for each 1 CNY paid',
-        balanceRechargeMultiplierMin: 'Downstream Admin Minimum',
-        balanceRechargeMultiplierMinHint: 'Downstream admins cannot set the recharge multiplier below this value',
         balanceRechargePreview: 'Preview: 1 CNY = {usd} USD',
         subscriptionUsdToCnyRate: 'Subscription USD to CNY Rate',
         subscriptionUsdToCnyRateHint:
@@ -1361,17 +1359,5 @@ export default {
       loadFailed: 'Failed to load profiles',
       saveFailed: 'Failed to save profile',
       deleteFailed: 'Failed to delete profile'
-    },
-    rechargeMultiplier: {
-      title: 'Recharge Multiplier',
-      description: 'Set the balance users receive after a recharge',
-      current: 'Current recharge multiplier',
-      minimum: 'Minimum set by the primary admin',
-      minimumHint: 'The current multiplier cannot be lower than {minimum}',
-      preview: 'A payment of 1 CNY credits {usd} USD balance',
-      loadFailed: 'Failed to load the recharge multiplier',
-      saveFailed: 'Failed to save the recharge multiplier',
-      saved: 'Recharge multiplier saved',
-      belowMinimum: 'The recharge multiplier cannot be lower than the primary admin minimum',
     }
 }

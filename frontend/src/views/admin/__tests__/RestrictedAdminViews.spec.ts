@@ -8,13 +8,13 @@ const srcRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
 const readSource = (relativePath: string) => readFileSync(resolve(srcRoot, relativePath), 'utf8')
 
 describe('restricted admin frontend contract', () => {
-  it('limits navigation and routes to users, recharge multiplier, recharge records, and usage records', () => {
+  it('limits navigation and routes to users, own API keys, recharge records, and usage records', () => {
     const sidebar = readSource('components/layout/AppSidebar.vue')
     const router = readSource('router/index.ts')
 
     for (const path of [
       '/admin/users/managed',
-      '/admin/recharge-multiplier',
+      '/keys',
       '/admin/orders/records',
       '/admin/usage/managed',
     ]) {
@@ -23,6 +23,8 @@ describe('restricted admin frontend contract', () => {
     }
     expect(router).toContain("next('/admin/users/managed')")
     expect(sidebar).toContain("return authStore.isPrimaryAdmin ? '/admin/dashboard' : '/admin/users/managed'")
+    expect(sidebar).not.toContain("'/admin/recharge-multiplier'")
+    expect(router).not.toContain("'/admin/recharge-multiplier'")
   })
 
   it('keeps user management in regular-user mode', () => {
@@ -40,15 +42,10 @@ describe('restricted admin frontend contract', () => {
     expect(users).toContain(':hide-actions="props.restricted"')
   })
 
-  it('exposes only the delegated recharge multiplier on the restricted settings page', () => {
-    const page = readSource('views/admin/RechargeMultiplierView.vue')
+  it('removes the delegated recharge multiplier API', () => {
     const paymentAPI = readSource('api/admin/payment.ts')
 
-    expect(page).toContain('adminPaymentAPI.getRechargeMultiplier()')
-    expect(page).toContain('adminPaymentAPI.updateRechargeMultiplier(multiplier.value)')
-    expect(page).toContain(':min="minimum"')
-    expect(page).toContain('readonly')
-    expect(paymentAPI).toContain("'/admin/payment/recharge-multiplier'")
+    expect(paymentAPI).not.toContain("'/admin/payment/recharge-multiplier'")
   })
 
   it('makes recharge and usage records read-only and hides platform internals', () => {

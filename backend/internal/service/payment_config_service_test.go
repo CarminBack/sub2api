@@ -110,9 +110,6 @@ func TestParsePaymentConfig(t *testing.T) {
 		if cfg.MaxPendingOrders != 3 {
 			t.Fatalf("expected MaxPendingOrders=3, got %v", cfg.MaxPendingOrders)
 		}
-		if cfg.BalanceRechargeMinimum != 1 {
-			t.Fatalf("expected BalanceRechargeMinimum=1, got %v", cfg.BalanceRechargeMinimum)
-		}
 		if cfg.LoadBalanceStrategy != payment.DefaultLoadBalanceStrategy {
 			t.Fatalf("expected LoadBalanceStrategy=%s, got %q", payment.DefaultLoadBalanceStrategy, cfg.LoadBalanceStrategy)
 		}
@@ -236,14 +233,6 @@ func TestParsePaymentConfig(t *testing.T) {
 		cfg := svc.parsePaymentConfig(vals)
 		if len(cfg.EnabledTypes) != 0 {
 			t.Fatalf("expected empty EnabledTypes for empty string, got %v", cfg.EnabledTypes)
-		}
-	})
-
-	t.Run("missing minimum inherits the existing multiplier", func(t *testing.T) {
-		t.Parallel()
-		cfg := svc.parsePaymentConfig(map[string]string{SettingBalanceRechargeMult: "0.14"})
-		if cfg.BalanceRechargeMinimum != 0.14 {
-			t.Fatalf("expected BalanceRechargeMinimum=0.14, got %v", cfg.BalanceRechargeMinimum)
 		}
 	})
 }
@@ -560,86 +549,6 @@ func TestUpdatePaymentConfig_PersistsExplicitEmptyAndFalseValues(t *testing.T) {
 			t.Fatalf("stored %q = %q, want %q", key, repo.values[key], value)
 		}
 	}
-}
-
-func TestUpdateRechargeMultiplierHonorsPrimaryMinimum(t *testing.T) {
-	t.Run("persists a value at or above the minimum and no other payment setting", func(t *testing.T) {
-		repo := &paymentConfigSettingRepoStub{values: map[string]string{
-			SettingBalanceRechargeMult: "1.50",
-			SettingBalanceRechargeMin:  "1.20",
-			SettingPaymentEnabled:      "true",
-		}}
-		svc := &PaymentConfigService{settingRepo: repo}
-
-		err := svc.UpdateRechargeMultiplier(context.Background(), 1.25)
-		if err != nil {
-			t.Fatalf("UpdateRechargeMultiplier returned error: %v", err)
-		}
-		if len(repo.updates) != 1 || repo.updates[SettingBalanceRechargeMult] != "1.25" {
-			t.Fatalf("updates = %v, want only the recharge multiplier", repo.updates)
-		}
-		if repo.values[SettingPaymentEnabled] != "true" {
-			t.Fatal("unrelated payment setting changed")
-		}
-	})
-
-	t.Run("rejects a value below the minimum", func(t *testing.T) {
-		repo := &paymentConfigSettingRepoStub{values: map[string]string{
-			SettingBalanceRechargeMult: "1.50",
-			SettingBalanceRechargeMin:  "1.20",
-		}}
-		svc := &PaymentConfigService{settingRepo: repo}
-
-		err := svc.UpdateRechargeMultiplier(context.Background(), 1.19)
-		if err == nil {
-			t.Fatal("expected below-minimum multiplier to be rejected")
-		}
-		if len(repo.updates) != 0 {
-			t.Fatalf("rejected update wrote settings: %v", repo.updates)
-		}
-	})
-}
-
-func TestUpdatePaymentConfigMaintainsRechargeMultiplierMinimum(t *testing.T) {
-	t.Run("primary admin can update the multiplier and minimum together", func(t *testing.T) {
-		repo := &paymentConfigSettingRepoStub{values: map[string]string{
-			SettingBalanceRechargeMult: "1.00",
-			SettingBalanceRechargeMin:  "1.00",
-		}}
-		svc := &PaymentConfigService{settingRepo: repo}
-		multiplier := 0.90
-		minimum := 0.80
-
-		err := svc.UpdatePaymentConfig(context.Background(), UpdatePaymentConfigRequest{
-			BalanceRechargeMultiplier: &multiplier,
-			BalanceRechargeMinimum:    &minimum,
-		})
-		if err != nil {
-			t.Fatalf("UpdatePaymentConfig returned error: %v", err)
-		}
-		if repo.updates[SettingBalanceRechargeMult] != "0.90" || repo.updates[SettingBalanceRechargeMin] != "0.80" {
-			t.Fatalf("updates = %v, want multiplier and minimum", repo.updates)
-		}
-	})
-
-	t.Run("rejects a minimum above the effective multiplier", func(t *testing.T) {
-		repo := &paymentConfigSettingRepoStub{values: map[string]string{
-			SettingBalanceRechargeMult: "1.00",
-			SettingBalanceRechargeMin:  "1.00",
-		}}
-		svc := &PaymentConfigService{settingRepo: repo}
-		minimum := 1.01
-
-		err := svc.UpdatePaymentConfig(context.Background(), UpdatePaymentConfigRequest{
-			BalanceRechargeMinimum: &minimum,
-		})
-		if err == nil {
-			t.Fatal("expected minimum above the multiplier to be rejected")
-		}
-		if len(repo.updates) != 0 {
-			t.Fatalf("rejected update wrote settings: %v", repo.updates)
-		}
-	})
 }
 
 func paymentConfigStrPtr(value string) *string {

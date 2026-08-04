@@ -63,11 +63,6 @@ export interface RefundResult {
   subscription_days_deducted?: number
 }
 
-export interface RechargeMultiplierConfig {
-  balance_recharge_multiplier: number
-  balance_recharge_multiplier_min: number
-}
-
 export const adminPaymentAPI = {
   // ==================== Config ====================
 
@@ -79,16 +74,6 @@ export const adminPaymentAPI = {
   /** Update payment configuration */
   updateConfig(data: UpdatePaymentConfigRequest) {
     return apiClient.put('/admin/payment/config', data)
-  },
-
-  /** Get the recharge multiplier settings delegated to downstream admins */
-  getRechargeMultiplier() {
-    return apiClient.get<RechargeMultiplierConfig>('/admin/payment/recharge-multiplier')
-  },
-
-  /** Update only the delegated recharge multiplier */
-  updateRechargeMultiplier(balance_recharge_multiplier: number) {
-    return apiClient.put('/admin/payment/recharge-multiplier', { balance_recharge_multiplier })
   },
 
   // ==================== Dashboard ====================

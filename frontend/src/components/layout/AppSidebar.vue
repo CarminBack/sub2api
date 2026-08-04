@@ -757,7 +757,7 @@ const adminNavItems = computed((): NavItem[] => {
   if (!authStore.isPrimaryAdmin) {
     return [
       { path: '/admin/users/managed', label: t('nav.users'), icon: UsersIcon },
-      { path: '/admin/recharge-multiplier', label: t('nav.rechargeMultiplier'), icon: CreditCardIcon },
+      { path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon },
       { path: '/admin/orders/records', label: t('nav.orderManagement'), icon: OrderIcon },
       { path: '/admin/usage/managed', label: t('nav.usage'), icon: ChartIcon },
     ]

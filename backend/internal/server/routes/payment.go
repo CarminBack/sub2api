@@ -78,8 +78,6 @@ func RegisterPaymentRoutes(
 	adminGroup.GET("/dashboard", adminPaymentHandler.GetDashboard)
 	adminGroup.GET("/orders", adminPaymentHandler.ListOrders)
 	adminGroup.GET("/orders/:id", adminPaymentHandler.GetOrderDetail)
-	adminGroup.GET("/recharge-multiplier", adminPaymentHandler.GetRechargeMultiplier)
-	adminGroup.PUT("/recharge-multiplier", adminPaymentHandler.UpdateRechargeMultiplier)
 
 	adminGroup.Use(middleware.PrimaryAdminOnly())
 	{

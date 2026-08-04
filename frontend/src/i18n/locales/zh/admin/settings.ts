@@ -603,8 +603,6 @@ export default {
         dailyLimit: '每日限额',
         balanceRechargeMultiplier: '余额充值倍率',
         balanceRechargeMultiplierHint: '用户每支付 1 CNY 可获得多少 USD 余额',
-        balanceRechargeMultiplierMin: '子管理员最低倍率',
-        balanceRechargeMultiplierMinHint: '子管理员不能把充值倍率设置为低于此值',
         balanceRechargePreview: '预览：1 CNY = {usd} USD',
         subscriptionUsdToCnyRate: '订阅 CNY 换算汇率',
         subscriptionUsdToCnyRateHint:
@@ -1355,17 +1353,5 @@ export default {
       loadFailed: '加载模板失败',
       saveFailed: '保存模板失败',
       deleteFailed: '删除模板失败'
-    },
-    rechargeMultiplier: {
-      title: '充值倍率',
-      description: '设置用户充值后获得的余额倍率',
-      current: '当前充值倍率',
-      minimum: '主管理员设置的最低倍率',
-      minimumHint: '当前倍率不能低于 {minimum}',
-      preview: '用户支付 1 CNY，将获得 {usd} USD 余额',
-      loadFailed: '加载充值倍率失败',
-      saveFailed: '保存充值倍率失败',
-      saved: '充值倍率已保存',
-      belowMinimum: '充值倍率不能低于主管理员设置的最低值',
     }
 }

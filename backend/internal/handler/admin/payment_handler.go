@@ -501,31 +501,3 @@ func (h *PaymentHandler) UpdateConfig(c *gin.Context) {
 	}
 	response.Success(c, gin.H{"message": "updated"})
 }
-
-// GetRechargeMultiplier returns the payment settings delegated to downstream admins.
-// GET /api/v1/admin/payment/recharge-multiplier
-func (h *PaymentHandler) GetRechargeMultiplier(c *gin.Context) {
-	cfg, err := h.configService.GetRechargeMultiplierConfig(c.Request.Context())
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	response.Success(c, cfg)
-}
-
-// UpdateRechargeMultiplier updates only the delegated balance recharge multiplier.
-// PUT /api/v1/admin/payment/recharge-multiplier
-func (h *PaymentHandler) UpdateRechargeMultiplier(c *gin.Context) {
-	var req struct {
-		Multiplier float64 `json:"balance_recharge_multiplier" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
-		return
-	}
-	if err := h.configService.UpdateRechargeMultiplier(c.Request.Context(), req.Multiplier); err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	response.Success(c, gin.H{"message": "updated"})
-}

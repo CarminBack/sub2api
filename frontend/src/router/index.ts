@@ -474,17 +474,6 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
-    path: '/admin/recharge-multiplier',
-    name: 'AdminRechargeMultiplier',
-    component: () => import('@/views/admin/RechargeMultiplierView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      title: 'Recharge Multiplier',
-      titleKey: 'admin.rechargeMultiplier.title'
-    }
-  },
-  {
     path: '/admin/groups',
     name: 'AdminGroups',
     component: () => import('@/views/admin/GroupsView.vue'),
@@ -945,7 +934,6 @@ router.beforeEach(async (to, _from, next) => {
     !new Set([
       '/admin/users/create',
       '/admin/users/managed',
-      '/admin/recharge-multiplier',
       '/admin/orders/records',
       '/admin/usage/managed'
     ]).has(to.path)
