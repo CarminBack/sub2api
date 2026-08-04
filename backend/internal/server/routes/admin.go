@@ -666,9 +666,9 @@ func registerUsageRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	{
 		usage.GET("", h.Admin.Usage.List)
 		usage.GET("/stats", h.Admin.Usage.Stats)
-		usage.GET("/search-users", h.Admin.Usage.SearchUsers)
-		usage.GET("/search-api-keys", h.Admin.Usage.SearchAPIKeys)
 		primaryOnly := middleware.PrimaryAdminOnly()
+		usage.GET("/search-users", primaryOnly, h.Admin.Usage.SearchUsers)
+		usage.GET("/search-api-keys", primaryOnly, h.Admin.Usage.SearchAPIKeys)
 		usage.GET("/cleanup-tasks", primaryOnly, h.Admin.Usage.ListCleanupTasks)
 		usage.POST("/cleanup-tasks", primaryOnly, h.Admin.Usage.CreateCleanupTask)
 		usage.POST("/cleanup-tasks/:id/cancel", primaryOnly, h.Admin.Usage.CancelCleanupTask)

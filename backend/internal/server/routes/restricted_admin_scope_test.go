@@ -32,7 +32,12 @@ func TestRestrictedAdminCannotAccessUserManagementRoutes(t *testing.T) {
 	stepUp := servermiddleware.StepUpAuthMiddleware(func(c *gin.Context) { c.Next() })
 	RegisterAdminRoutes(router.Group("/api/v1"), handlers, adminAuth, auditLog, stepUp, nil, nil)
 
-	for _, path := range []string{"/api/v1/admin/users", "/api/v1/admin/users/10"} {
+	for _, path := range []string{
+		"/api/v1/admin/users",
+		"/api/v1/admin/users/10",
+		"/api/v1/admin/usage/search-users?q=user",
+		"/api/v1/admin/usage/search-api-keys?q=key",
+	} {
 		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		router.ServeHTTP(recorder, request)
