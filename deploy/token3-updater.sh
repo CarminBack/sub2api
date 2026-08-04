@@ -241,7 +241,8 @@ while ((SECONDS < workflow_deadline)); do
     esac
   done
   ((all_succeeded == 1)) && break
-  sleep 15
+  # Unauthenticated public API calls are limited to 60/hour per source IP.
+  sleep 60
 done
 ((all_succeeded == 1)) || finish_failed "Timed out waiting for GitHub workflows"
 
