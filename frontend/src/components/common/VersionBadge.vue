@@ -114,8 +114,39 @@
                 </p>
               </div>
 
-              <!-- Priority 1: Update error (must check before hasUpdate) -->
-              <div v-if="updateError" class="space-y-2">
+              <!-- Priority 1: Managed Token3 update progress -->
+              <div v-if="managedUpdateActive" class="space-y-2">
+                <div
+                  class="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800/50 dark:bg-blue-900/20"
+                >
+                  <svg class="h-5 w-5 animate-spin text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24">
+                    <circle
+                      class="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      stroke-width="4"
+                    ></circle>
+                    <path
+                      class="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-medium text-blue-700 dark:text-blue-300">
+                      {{ managedStatusLabel }}
+                    </p>
+                    <p v-if="managedTargetVersion" class="text-xs text-blue-600/70 dark:text-blue-400/70">
+                      v{{ managedTargetVersion }}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Priority 2: Update error (must check before hasUpdate) -->
+              <div v-else-if="updateError" class="space-y-2">
                 <div
                   class="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800/50 dark:bg-red-900/20"
                 >
@@ -149,7 +180,7 @@
                 </button>
               </div>
 
-              <!-- Priority 2: Update success - need restart -->
+              <!-- Priority 3: Update success - need restart -->
               <div v-else-if="updateSuccess && needRestart" class="space-y-2">
                 <div
                   class="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800/50 dark:bg-green-900/20"
@@ -643,9 +674,11 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore } from '@/stores'
 import {
   performUpdate,
+  getManagedUpdateStatus,
   restartService,
   getRollbackVersions,
   rollback as rollbackAPI,
+  type ManagedUpdateState,
   type RollbackVersionInfo
 } from '@/api/admin/system'
 import { useClipboard } from '@/composables/useClipboard'
@@ -686,6 +719,14 @@ const updateSuccess = ref(false)
 const restartCountdown = ref(0)
 // Distinguishes the success + restart panel between update and rollback flows
 const successKind = ref<'update' | 'rollback'>('update')
+const managedUpdateState = ref<ManagedUpdateState>('idle')
+const managedTargetVersion = ref('')
+let managedPollTimer: ReturnType<typeof setTimeout> | undefined
+
+const managedUpdateActive = computed(() =>
+  ['queued', 'syncing', 'building', 'deploying'].includes(managedUpdateState.value)
+)
+const managedStatusLabel = computed(() => t(`version.managedUpdate.${managedUpdateState.value}`))
 
 // Rollback states
 const rollbackPanelOpen = ref(false)
@@ -758,8 +799,15 @@ async function handleUpdate() {
   updateError.value = ''
   updateSuccess.value = false
 
+  let managed = false
   try {
     const result = await performUpdate()
+    if (result.managed_update) {
+      managed = true
+      managedUpdateState.value = 'queued'
+      await pollManagedUpdate()
+      return
+    }
     successKind.value = 'update'
     updateSuccess.value = true
     needRestart.value = result.need_restart
@@ -769,7 +817,55 @@ async function handleUpdate() {
     const err = error as { response?: { data?: { message?: string } }; message?: string }
     updateError.value = err.response?.data?.message || err.message || t('version.updateFailed')
   } finally {
-    updating.value = false
+    if (!managed) updating.value = false
+  }
+}
+
+function scheduleManagedUpdatePoll() {
+  if (managedPollTimer) clearTimeout(managedPollTimer)
+  managedPollTimer = setTimeout(() => void pollManagedUpdate(), 3000)
+}
+
+async function pollManagedUpdate() {
+  try {
+    const status = await getManagedUpdateStatus()
+    if (['queued', 'syncing', 'building', 'deploying'].includes(status.state)) {
+      managedUpdateState.value = status.state
+      managedTargetVersion.value = status.target_version || managedTargetVersion.value
+      updating.value = true
+      scheduleManagedUpdatePoll()
+      return
+    }
+    if (status.state === 'failed') {
+      managedUpdateState.value = status.state
+      updating.value = false
+      updateError.value = status.message || t('version.updateFailed')
+      return
+    }
+    if (status.state === 'succeeded' && managedUpdateActive.value) {
+      managedUpdateState.value = status.state
+      updating.value = false
+      appStore.clearVersionCache()
+      setTimeout(() => window.location.reload(), 750)
+      return
+    }
+    if (managedUpdateActive.value) scheduleManagedUpdatePoll()
+  } catch {
+    // The app container is briefly unavailable while Compose replaces it.
+    if (managedUpdateActive.value) scheduleManagedUpdatePoll()
+  }
+}
+
+async function resumeManagedUpdate() {
+  try {
+    const status = await getManagedUpdateStatus()
+    if (!['queued', 'syncing', 'building', 'deploying'].includes(status.state)) return
+    managedUpdateState.value = status.state
+    managedTargetVersion.value = status.target_version || ''
+    updating.value = true
+    scheduleManagedUpdatePoll()
+  } catch {
+    // Older Token3 builds do not expose managed update status.
   }
 }
 
@@ -912,12 +1008,15 @@ function handleClickOutside(event: MouseEvent) {
 onMounted(() => {
   if (isAdmin.value) {
     // Use cached version if available, otherwise fetch
-    appStore.fetchVersion(false)
+    void appStore.fetchVersion(false).then(() => {
+      if (currentVersion.value.includes('-token3.')) void resumeManagedUpdate()
+    })
   }
   document.addEventListener('click', handleClickOutside)
 })
 
 onBeforeUnmount(() => {
+  if (managedPollTimer) clearTimeout(managedPollTimer)
   document.removeEventListener('click', handleClickOutside)
 })
 </script>

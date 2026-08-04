@@ -35,6 +35,15 @@ export default {
     updating: '正在更新...',
     updateComplete: '更新完成',
     updateFailed: '更新失败',
+    managedUpdate: {
+      queued: '更新任务已排队',
+      syncing: '正在同步官方代码',
+      building: '正在构建并执行安全检查',
+      deploying: '正在备份并部署应用',
+      idle: '等待更新',
+      succeeded: '更新完成',
+      failed: '更新失败'
+    },
     restartRequired: '请重启服务以应用更新',
     restartNow: '立即重启',
     restarting: '正在重启...',

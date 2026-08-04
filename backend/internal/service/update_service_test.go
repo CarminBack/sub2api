@@ -4,7 +4,10 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -67,6 +70,83 @@ func TestUpdateServicePerformUpdateNoUpdateReturnsSentinel(t *testing.T) {
 	require.Error(t, err)
 	require.True(t, errors.Is(err, ErrNoUpdateAvailable))
 	require.ErrorIs(t, err, ErrNoUpdateAvailable)
+}
+
+func TestCompareVersionsIgnoresToken3BuildSuffix(t *testing.T) {
+	require.Equal(t, 0, compareVersions("0.1.170-token3.2", "0.1.170"))
+	require.Equal(t, -1, compareVersions("0.1.170-token3.2", "0.1.171"))
+	require.Equal(t, 1, compareVersions("v0.1.171-token3.1", "0.1.170"))
+}
+
+func TestUpdateServiceToken3SameOfficialVersionDoesNotQueue(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TOKEN3_UPDATE_DIR", dir)
+	svc := NewUpdateService(
+		&updateServiceCacheStub{},
+		&updateServiceGitHubClientStub{release: &GitHubRelease{TagName: "v0.1.170"}},
+		"0.1.170-token3.2",
+		"release",
+	)
+
+	err := svc.PerformUpdate(context.Background())
+
+	require.ErrorIs(t, err, ErrNoUpdateAvailable)
+	_, statErr := os.Stat(filepath.Join(dir, managedUpdateRequestFile))
+	require.ErrorIs(t, statErr, os.ErrNotExist)
+}
+
+func TestUpdateServiceToken3QueuesManagedUpdate(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TOKEN3_UPDATE_DIR", dir)
+	svc := NewUpdateService(
+		&updateServiceCacheStub{},
+		&updateServiceGitHubClientStub{release: &GitHubRelease{TagName: "v0.1.171"}},
+		"0.1.170-token3.2",
+		"release",
+	)
+
+	err := svc.PerformUpdate(context.Background())
+
+	require.ErrorIs(t, err, ErrManagedUpdateQueued)
+	data, readErr := os.ReadFile(filepath.Join(dir, managedUpdateRequestFile))
+	require.NoError(t, readErr)
+	var request ManagedUpdateRequest
+	require.NoError(t, json.Unmarshal(data, &request))
+	require.Equal(t, "0.1.170-token3.2", request.CurrentVersion)
+	require.Equal(t, "0.1.171", request.TargetVersion)
+	require.False(t, request.RequestedAt.IsZero())
+}
+
+func TestUpdateServiceToken3RejectsActiveManagedUpdate(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TOKEN3_UPDATE_DIR", dir)
+	require.NoError(t, writeJSONAtomic(filepath.Join(dir, managedUpdateStatusFile), ManagedUpdateStatus{
+		State: "building",
+	}, 0644))
+	svc := NewUpdateService(
+		&updateServiceCacheStub{},
+		&updateServiceGitHubClientStub{release: &GitHubRelease{TagName: "v0.1.171"}},
+		"0.1.170-token3.2",
+		"release",
+	)
+
+	err := svc.PerformUpdate(context.Background())
+
+	require.ErrorIs(t, err, ErrManagedUpdateInProgress)
+}
+
+func TestUpdateServiceReadsManagedUpdateStatus(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TOKEN3_UPDATE_DIR", dir)
+	want := ManagedUpdateStatus{State: "deploying", TargetVersion: "0.1.171"}
+	require.NoError(t, writeJSONAtomic(filepath.Join(dir, managedUpdateStatusFile), want, 0644))
+	svc := NewUpdateService(nil, nil, "0.1.170-token3.2", "release")
+
+	got, err := svc.GetManagedUpdateStatus()
+
+	require.NoError(t, err)
+	require.Equal(t, want.State, got.State)
+	require.Equal(t, want.TargetVersion, got.TargetVersion)
 }
 
 func newRollbackTestService(current string, releases []*GitHubRelease) *UpdateService {

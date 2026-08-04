@@ -35,6 +35,15 @@ export default {
     updating: 'Updating...',
     updateComplete: 'Update Complete',
     updateFailed: 'Update Failed',
+    managedUpdate: {
+      queued: 'Update queued',
+      syncing: 'Syncing official source',
+      building: 'Building and running security checks',
+      deploying: 'Backing up and deploying the application',
+      idle: 'Waiting for update',
+      succeeded: 'Update complete',
+      failed: 'Update failed'
+    },
     restartRequired: 'Please restart the service to apply the update',
     restartNow: 'Restart Now',
     restarting: 'Restarting...',

@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for Token3 managed update requests
+
+[Path]
+PathExists=/opt/sub2api2/data/token3-update/request.json
+Unit=token3-updater.service
+
+[Install]
+WantedBy=multi-user.target

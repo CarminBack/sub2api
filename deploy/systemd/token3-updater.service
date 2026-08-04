@@ -1,0 +1,17 @@
+[Unit]
+Description=Token3 official release synchronizer and application updater
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=-/etc/token3-updater.env
+ExecStart=/usr/local/sbin/token3-updater
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+PrivateTmp=true
+NoNewPrivileges=true
+TimeoutStartSec=1h

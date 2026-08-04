@@ -12,7 +12,12 @@ vi.mock('../client', () => ({
   },
 }))
 
-import { getRollbackVersions, rollback, type RollbackVersionInfo } from '@/api/admin/system'
+import {
+  getManagedUpdateStatus,
+  getRollbackVersions,
+  rollback,
+  type RollbackVersionInfo
+} from '@/api/admin/system'
 
 describe('admin system rollback API', () => {
   beforeEach(() => {
@@ -36,12 +41,25 @@ describe('admin system rollback API', () => {
     expect(result.versions).toEqual(versions)
   })
 
+  it('getManagedUpdateStatus fetches host-managed update progress', async () => {
+    get.mockResolvedValue({ data: { state: 'building', target_version: '0.1.171' } })
+
+    const result = await getManagedUpdateStatus()
+
+    expect(get).toHaveBeenCalledWith('/admin/system/update-status')
+    expect(result).toEqual({ state: 'building', target_version: '0.1.171' })
+  })
+
   it('rollback posts the target version in the request body', async () => {
     post.mockResolvedValue({ data: { message: 'ok', need_restart: true } })
 
     const result = await rollback('0.1.146')
 
-    expect(post).toHaveBeenCalledWith('/admin/system/rollback', { version: '0.1.146' })
+    expect(post).toHaveBeenCalledWith(
+      '/admin/system/rollback',
+      { version: '0.1.146' },
+      { timeout: 15 * 60 * 1000 }
+    )
     expect(result.need_restart).toBe(true)
   })
 
@@ -50,6 +68,8 @@ describe('admin system rollback API', () => {
 
     await rollback()
 
-    expect(post).toHaveBeenCalledWith('/admin/system/rollback', undefined)
+    expect(post).toHaveBeenCalledWith('/admin/system/rollback', undefined, {
+      timeout: 15 * 60 * 1000
+    })
   })
 })

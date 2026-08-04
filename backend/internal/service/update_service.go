@@ -172,6 +172,13 @@ func (s *UpdateService) PerformUpdate(ctx context.Context) error {
 		return ErrNoUpdateAvailable
 	}
 
+	if isToken3Version(s.currentVersion) {
+		if err := s.queueManagedUpdate(info.LatestVersion); err != nil {
+			return err
+		}
+		return ErrManagedUpdateQueued
+	}
+
 	return s.applyReleaseAssets(ctx, info.ReleaseInfo.Assets)
 }
 
@@ -654,7 +661,7 @@ func compareVersions(current, latest string) int {
 }
 
 func parseVersion(v string) [3]int {
-	v = strings.TrimPrefix(v, "v")
+	v = strings.SplitN(strings.TrimPrefix(v, "v"), "-", 2)[0]
 	parts := strings.Split(v, ".")
 	result := [3]int{0, 0, 0}
 	for i := 0; i < len(parts) && i < 3; i++ {

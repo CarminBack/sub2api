@@ -26,6 +26,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Read Token3 version
+        id: version
+        run: echo "value=$(tr -d '\r\n' < TOKEN3_VERSION)" >> "$GITHUB_OUTPUT"
+
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -35,5 +39,5 @@ jobs:
             ghcr.io/carminback/sub2api:token3-restricted-admin
             ghcr.io/carminback/sub2api:sha-${{ github.sha }}
           build-args: |
-            VERSION=0.1.170-token3.2
+            VERSION=${{ steps.version.outputs.value }}
             COMMIT=${{ github.sha }}

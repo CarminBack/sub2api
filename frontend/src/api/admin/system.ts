@@ -43,6 +43,31 @@ export async function checkUpdates(force = false): Promise<VersionInfo> {
 export interface UpdateResult {
   message: string
   need_restart: boolean
+  managed_update?: boolean
+}
+
+export type ManagedUpdateState =
+  | 'idle'
+  | 'queued'
+  | 'syncing'
+  | 'building'
+  | 'deploying'
+  | 'succeeded'
+  | 'failed'
+
+export interface ManagedUpdateStatus {
+  state: ManagedUpdateState
+  message?: string
+  current_version?: string
+  target_version?: string
+  started_at?: string
+  updated_at?: string
+  finished_at?: string
+}
+
+export async function getManagedUpdateStatus(): Promise<ManagedUpdateStatus> {
+  const { data } = await apiClient.get<ManagedUpdateStatus>('/admin/system/update-status')
+  return data
 }
 
 export interface RollbackVersionInfo {
@@ -105,6 +130,7 @@ export const systemAPI = {
   getVersion,
   checkUpdates,
   performUpdate,
+  getManagedUpdateStatus,
   getRollbackVersions,
   rollback,
   restartService

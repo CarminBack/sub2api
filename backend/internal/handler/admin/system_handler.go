@@ -46,6 +46,7 @@ func systemUpdateContext(ctx context.Context) (context.Context, context.CancelFu
 type systemUpdateService interface {
 	CheckUpdate(ctx context.Context, force bool) (*service.UpdateInfo, error)
 	PerformUpdate(ctx context.Context) error
+	GetManagedUpdateStatus() (*service.ManagedUpdateStatus, error)
 	Rollback() error
 	ListRollbackVersions(ctx context.Context) ([]service.RollbackVersion, error)
 	RollbackToVersion(ctx context.Context, version string) error
@@ -100,6 +101,15 @@ func (h *SystemHandler) PerformUpdate(c *gin.Context) {
 		defer cancel()
 
 		if err := h.updateSvc.PerformUpdate(updateCtx); err != nil {
+			if errors.Is(err, service.ErrManagedUpdateQueued) {
+				succeeded = true
+				return gin.H{
+					"message":        "Managed update queued",
+					"managed_update": true,
+					"need_restart":   false,
+					"operation_id":   lock.OperationID(),
+				}, nil
+			}
 			if errors.Is(err, service.ErrNoUpdateAvailable) {
 				info, checkErr := h.updateSvc.CheckUpdate(updateCtx, false)
 				if checkErr != nil {
@@ -126,6 +136,17 @@ func (h *SystemHandler) PerformUpdate(c *gin.Context) {
 			"operation_id": lock.OperationID(),
 		}, nil
 	})
+}
+
+// GetManagedUpdateStatus returns progress reported by the Token3 host updater.
+// GET /api/v1/admin/system/update-status
+func (h *SystemHandler) GetManagedUpdateStatus(c *gin.Context) {
+	status, err := h.updateSvc.GetManagedUpdateStatus()
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.Success(c, status)
 }
 
 // GetRollbackVersions lists versions available for rollback
