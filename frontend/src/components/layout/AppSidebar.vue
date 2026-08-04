@@ -102,7 +102,7 @@
         </div>
 
         <!-- Personal Section for Admin (hidden in simple mode) -->
-        <div v-if="authStore.isPrimaryAdmin && !authStore.isSimpleMode" class="sidebar-section">
+        <div v-if="!authStore.isSimpleMode" class="sidebar-section">
           <div class="sidebar-section-title" :class="{ 'sidebar-section-title-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">
             <span class="sidebar-section-title-text" :class="{ 'sidebar-section-title-text-collapsed': sidebarCollapsed }">
               {{ t('nav.myAccount') }}
@@ -252,7 +252,7 @@ const isDark = ref(document.documentElement.classList.contains('dark'))
 
 const homePath = computed(() => {
   if (!isAdmin.value) return '/dashboard'
-  return authStore.isPrimaryAdmin ? '/admin/dashboard' : '/admin/users/managed'
+  return authStore.isPrimaryAdmin ? '/admin/dashboard' : '/admin/usage/managed'
 })
 
 // Track which parent nav groups are expanded
@@ -733,10 +733,12 @@ function finalizeNav(items: NavItem[]): NavItem[] {
 // User navigation items (for regular users)
 const userNavItems = computed((): NavItem[] => finalizeNav(buildSelfNavItems(true)))
 
-// Personal navigation items (for admin's "My Account" section, without Dashboard).
-// Admins access 可用渠道 from this section just like regular users — there is no
-// separate admin entry, since the page is purely a user-facing view.
-const personalNavItems = computed((): NavItem[] => finalizeNav(buildSelfNavItems(false)))
+// Personal navigation items for the admin's "My Account" section. The primary
+// admin omits the user dashboard because the admin dashboard is already shown;
+// restricted admins retain the full user-facing menu, including that dashboard.
+const personalNavItems = computed(() =>
+  finalizeNav(buildSelfNavItems(authStore.isPrimaryAdmin ? false : true)),
+)
 
 // Custom menu items filtered by visibility
 const customMenuItemsForUser = computed(() => {
@@ -755,12 +757,7 @@ const customMenuItemsForAdmin = computed(() => {
 // Admin navigation items
 const adminNavItems = computed((): NavItem[] => {
   if (!authStore.isPrimaryAdmin) {
-    return [
-      { path: '/admin/users/managed', label: t('nav.users'), icon: UsersIcon },
-      { path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon },
-      { path: '/admin/orders/records', label: t('nav.orderManagement'), icon: OrderIcon },
-      { path: '/admin/usage/managed', label: t('nav.usage'), icon: ChartIcon },
-    ]
+    return [{ path: '/admin/usage/managed', label: t('nav.usage'), icon: ChartIcon }]
   }
 
   const baseItems: NavItem[] = [

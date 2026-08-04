@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -82,6 +83,30 @@ func TestRestrictedAdminUsageForcesRegularUserScope(t *testing.T) {
 
 	require.Equal(t, service.RoleUser, repo.listFilters.UserRole)
 	require.Equal(t, service.RoleUser, repo.statsFilters.UserRole)
+}
+
+func TestRestrictedAdminUsageIsLimitedToToday(t *testing.T) {
+	repo := &adminUsageRepoCapture{}
+	router := newRestrictedAdminUsageTestRouter(repo, newStubAdminService())
+
+	for _, path := range []string{
+		"/admin/usage?timezone=UTC&start_date=2000-01-01&end_date=2000-01-02",
+		"/admin/usage/stats?timezone=UTC&period=month&start_date=2000-01-01&end_date=2000-01-02",
+	} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code)
+	}
+
+	now := timezone.NowInUserLocation("UTC")
+	expectedStart := timezone.StartOfDayInUserLocation(now, "UTC")
+	for _, filters := range []usagestats.UsageLogFilters{repo.listFilters, repo.statsFilters} {
+		require.NotNil(t, filters.StartTime)
+		require.NotNil(t, filters.EndTime)
+		require.Equal(t, expectedStart, *filters.StartTime)
+		require.Equal(t, expectedStart.Format("2006-01-02"), filters.EndTime.Format("2006-01-02"))
+	}
 }
 
 func TestRestrictedAdminUsageRejectsPlatformFilters(t *testing.T) {

@@ -73,13 +73,14 @@ func RegisterPaymentRoutes(
 	adminGroup.Use(gin.HandlerFunc(adminAuth))
 	adminGroup.Use(gin.HandlerFunc(auditLog))
 	adminGroup.Use(middleware.AdminComplianceGuard(settingService))
+	// Administrative order and payment configuration APIs are primary-admin
+	// only. Restricted admins use the regular user payment endpoints above.
+	adminGroup.Use(middleware.PrimaryAdminOnly())
 
-	// 下游管理员只读查看充值汇总与订单记录。
 	adminGroup.GET("/dashboard", adminPaymentHandler.GetDashboard)
 	adminGroup.GET("/orders", adminPaymentHandler.ListOrders)
 	adminGroup.GET("/orders/:id", adminPaymentHandler.GetOrderDetail)
 
-	adminGroup.Use(middleware.PrimaryAdminOnly())
 	{
 		// Config
 		adminGroup.GET("/config", adminPaymentHandler.GetConfig)

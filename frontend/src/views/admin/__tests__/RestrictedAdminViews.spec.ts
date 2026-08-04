@@ -8,21 +8,25 @@ const srcRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
 const readSource = (relativePath: string) => readFileSync(resolve(srcRoot, relativePath), 'utf8')
 
 describe('restricted admin frontend contract', () => {
-  it('limits navigation and routes to users, own API keys, recharge records, and usage records', () => {
+  it('keeps regular-user capabilities and exposes only daily managed usage', () => {
     const sidebar = readSource('components/layout/AppSidebar.vue')
     const router = readSource('router/index.ts')
 
     for (const path of [
-      '/admin/users/managed',
       '/keys',
-      '/admin/orders/records',
+      '/purchase',
+      '/orders',
       '/admin/usage/managed',
     ]) {
       expect(sidebar).toContain(path)
-      expect(router).toContain(path)
     }
-    expect(router).toContain("next('/admin/users/managed')")
-    expect(sidebar).toContain("return authStore.isPrimaryAdmin ? '/admin/dashboard' : '/admin/users/managed'")
+    expect(router).toContain("next('/admin/usage/managed')")
+    expect(sidebar).toContain("return authStore.isPrimaryAdmin ? '/admin/dashboard' : '/admin/usage/managed'")
+    expect(router).toContain("path: '/admin/usage/managed'")
+    expect(router).not.toContain("path: '/admin/users/managed'")
+    expect(router).not.toContain("path: '/admin/orders/records'")
+    expect(sidebar).not.toContain("{ path: '/admin/users/managed'")
+    expect(sidebar).not.toContain("{ path: '/admin/orders/records'")
     expect(sidebar).not.toContain("'/admin/recharge-multiplier'")
     expect(router).not.toContain("'/admin/recharge-multiplier'")
   })

@@ -288,30 +288,32 @@ func registerDashboardRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 
 func registerUserManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	users := admin.Group("/users")
+	// Restricted admins only have the user-facing account capabilities. All
+	// administrative user management remains reserved for the primary admin.
+	users.Use(middleware.PrimaryAdminOnly())
 	{
-		primaryOnly := middleware.PrimaryAdminOnly()
 		users.GET("", h.Admin.User.List)
 		users.GET("/:id", h.Admin.User.GetByID)
-		users.POST("/:id/auth-identities", primaryOnly, h.Admin.User.BindAuthIdentity)
+		users.POST("/:id/auth-identities", h.Admin.User.BindAuthIdentity)
 		users.POST("", h.Admin.User.Create)
 		users.POST("/regular", h.Admin.User.CreateRegular)
 		users.PUT("/:id", h.Admin.User.Update)
 		users.DELETE("/:id", h.Admin.User.Delete)
-		users.POST("/:id/balance", primaryOnly, h.Admin.User.UpdateBalance)
+		users.POST("/:id/balance", h.Admin.User.UpdateBalance)
 		users.GET("/:id/api-keys", h.Admin.User.GetUserAPIKeys)
 		users.GET("/:id/usage", h.Admin.User.GetUserUsage)
 		users.GET("/:id/balance-history", h.Admin.User.GetBalanceHistory)
-		users.POST("/:id/replace-group", primaryOnly, h.Admin.User.ReplaceGroup)
+		users.POST("/:id/replace-group", h.Admin.User.ReplaceGroup)
 		users.GET("/:id/rpm-status", h.Admin.User.GetUserRPMStatus)
-		users.POST("/batch-concurrency", primaryOnly, h.Admin.User.BatchUpdateConcurrency)
-		users.POST("/batch-limits", primaryOnly, h.Admin.User.BatchUpdateLimits)
-		users.GET("/:id/platform-quotas", primaryOnly, h.Admin.User.GetUserPlatformQuotas)
-		users.PUT("/:id/platform-quotas", primaryOnly, h.Admin.User.UpdateUserPlatformQuotas)
-		users.POST("/:id/platform-quotas/reset", primaryOnly, h.Admin.User.ResetUserPlatformQuotaWindow)
+		users.POST("/batch-concurrency", h.Admin.User.BatchUpdateConcurrency)
+		users.POST("/batch-limits", h.Admin.User.BatchUpdateLimits)
+		users.GET("/:id/platform-quotas", h.Admin.User.GetUserPlatformQuotas)
+		users.PUT("/:id/platform-quotas", h.Admin.User.UpdateUserPlatformQuotas)
+		users.POST("/:id/platform-quotas/reset", h.Admin.User.ResetUserPlatformQuotaWindow)
 
 		// User attribute values
-		users.GET("/:id/attributes", primaryOnly, h.Admin.UserAttribute.GetUserAttributes)
-		users.PUT("/:id/attributes", primaryOnly, h.Admin.UserAttribute.UpdateUserAttributes)
+		users.GET("/:id/attributes", h.Admin.UserAttribute.GetUserAttributes)
+		users.PUT("/:id/attributes", h.Admin.UserAttribute.UpdateUserAttributes)
 	}
 }
 

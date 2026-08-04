@@ -73,6 +73,15 @@ func validateRestrictedUsageScope(c *gin.Context, userID, apiKeyID int64) bool {
 	return true
 }
 
+// restrictedUsageToday returns the current day in the requester's timezone.
+// Restricted admins may inspect regular-user usage, but never historical data.
+func restrictedUsageToday(c *gin.Context) (*time.Time, *time.Time) {
+	userTZ := c.Query("timezone")
+	now := timezone.NowInUserLocation(userTZ)
+	start := timezone.StartOfDayInUserLocation(now, userTZ)
+	return &start, &now
+}
+
 // CreateUsageCleanupTaskRequest represents cleanup task creation request
 type CreateUsageCleanupTaskRequest struct {
 	StartDate   string  `json:"start_date"`
@@ -201,6 +210,10 @@ func (h *UsageHandler) List(c *gin.Context) {
 		// Use half-open range [start, end), move to next calendar day start (DST-safe).
 		t = t.AddDate(0, 0, 1)
 		endTime = &t
+	}
+	if middleware.IsRestrictedAdmin(c) {
+		// Ignore client-supplied dates and keep this endpoint strictly today-only.
+		startTime, endTime = restrictedUsageToday(c)
 	}
 
 	params := pagination.PaginationParams{
@@ -366,6 +379,11 @@ func (h *UsageHandler) Stats(c *gin.Context) {
 			startTime = timezone.StartOfDayInUserLocation(now, userTZ)
 		}
 		endTime = now
+	}
+	if middleware.IsRestrictedAdmin(c) {
+		// Ignore period/date ranges supplied by the client for restricted admins.
+		startPtr, endPtr := restrictedUsageToday(c)
+		startTime, endTime = *startPtr, *endPtr
 	}
 
 	// Build filters and call GetStatsWithFilters
